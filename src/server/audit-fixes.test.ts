@@ -1,8 +1,20 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createHash } from "node:crypto";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { stampRequest } from "@/lib/api/contracts";
+
+// A cookie jar standing in for the request's cookies (till devices read theirs).
+const jar = new Map<string, string>();
+vi.mock("next/headers", () => ({
+  cookies: async () => ({
+    get: (name: string) => (jar.has(name) ? { value: jar.get(name)! } : undefined),
+    set: (name: string, value: string) => void jar.set(name, value),
+    delete: (name: string) => void jar.delete(name),
+  }),
+  headers: async () => new Headers(),
+}));
 
 // db.ts reads DATA_DIR on load, so point it at a scratch directory first.
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "tapmore-audit-"));
@@ -84,6 +96,40 @@ describe("feedback stamps", () => {
     expect(joined.cardId).toBeTruthy();
   });
 
+  it("can be claimed with the card on the member's phone, still once per member", async () => {
+    const venue = await stampVenue();
+    const joined = await m.loyalty.enroll({ venueId: venue.id, email: "fb-card@example.com" }, ORIGIN);
+    const card = { cardId: joined.cardId, token: new URLSearchParams(joined.cardUrl!.split("?")[1]).get("t")! };
+    const claim = async (proof: { card: typeof card }) => {
+      const { stampReceipt } = await m.feedback.submitFeedback({ venueId: venue.id, text: "Lovely" });
+      return (await m.loyalty.stampForFeedback({ venueId: venue.id, ...proof, feedbackReceipt: stampReceipt! })).stamped;
+    };
+    expect(await claim({ card: { ...card, token: "x".repeat(32) } })).toBe(false);
+    expect(await claim({ card })).toBe(true);
+    expect(await claim({ card })).toBe(false);
+    expect(stampRequest.safeParse({ venueId: venue.id, feedbackReceipt: { feedbackId: "fbk_x", token: "y".repeat(32) } }).success).toBe(false);
+  });
+
+  it("are once per member, ever: later feedback earns nothing", async () => {
+    const venue = await stampVenue();
+    await m.loyalty.enroll({ venueId: venue.id, email: "fb-once@example.com" }, ORIGIN);
+    const claim = async () => {
+      const { stampReceipt } = await m.feedback.submitFeedback({ venueId: venue.id, text: "Nice" });
+      return (await m.loyalty.stampForFeedback({ venueId: venue.id, email: "fb-once@example.com", feedbackReceipt: stampReceipt! })).stamped;
+    };
+    expect(await claim()).toBe(true);
+    // Days later, from anywhere: no more stamps for feedback.
+    const db = await m.db.getDb();
+    await db.run("UPDATE loyalty_cards SET last_feedback_stamp_at = now() - INTERVAL '10 days' WHERE venue_id = ?", venue.id);
+    expect(await claim()).toBe(false);
+
+    // Joining after feedback with its free stamp counts as the once.
+    const { stampReceipt } = await m.feedback.submitFeedback({ venueId: venue.id, text: "Good" });
+    await m.loyalty.enroll({ venueId: venue.id, email: "fb-join@example.com", initialStamps: 1, captureSource: "feedback", feedbackReceipt: stampReceipt! }, ORIGIN);
+    const later = await m.feedback.submitFeedback({ venueId: venue.id, text: "Again" });
+    expect((await m.loyalty.stampForFeedback({ venueId: venue.id, email: "fb-join@example.com", feedbackReceipt: later.stampReceipt! })).stamped).toBe(false);
+  });
+
   it("are off when the owner switches them off", async () => {
     const venue = await stampVenue();
     await m.venues.saveVenueSettings(venue.id, { ...(await m.venues.getVenueSettings(venue.id)), stampPolicy: { cooldownMinutes: 30, feedbackStamp: false } });
@@ -112,6 +158,91 @@ describe("returning members", () => {
     const again = await m.loyalty.enroll({ venueId: venue.id, email: "back@example.com" }, ORIGIN);
     expect(again.wasExisting).toBe(true);
     expect(again.cardUrl).toBeNull();
+    // Typing someone's email doesn't hand out their guest id (which unlocks the birthday and visit endpoints).
+    expect(first.customerId).toBeTruthy();
+    expect(again.customerId).toBeNull();
+  });
+
+  it("get their card emailed again at once on a new phone, a few times an hour at most", async () => {
+    const venue = await stampVenue();
+    const join = () => m.loyalty.enroll({ venueId: venue.id, email: "new-phone@example.com" }, ORIGIN);
+    expect((await join()).passEmailed).toBe(true);
+    // Straight after joining, a "new phone" gets the card again: no waiting.
+    const resends = [await join(), await join(), await join(), await join()].map((r) => r.passEmailed);
+    expect(resends).toEqual([true, true, true, false]);
+    const db = await m.db.getDb();
+    expect((await db.get<{ n: number }>("SELECT COUNT(*) AS n FROM outbox WHERE recipient = 'new-phone@example.com'"))!.n).toBe(4);
+  });
+
+  it("can't have a birthday added by someone re-joining with their email", async () => {
+    const venue = await stampVenue({ crm: { enabled: true, wifiCapture: false, feedbackCapture: false, birthdayAsk: true } });
+    const join = (birthday?: { month: number; day: number }) =>
+      m.loyalty.enroll({ venueId: venue.id, email: "no-bday@example.com", birthday }, ORIGIN);
+    const first = await join();
+    await join({ month: 3, day: 3 });
+    const db = await m.db.getDb();
+    const row = (await m.customers.findCustomerById(db, venue.id, first.customerId!))!;
+    expect(row.birthday_month).toBeNull();
+    // A new member's own birthday, given as they join, is kept.
+    const fresh = await m.loyalty.enroll({ venueId: venue.id, email: "has-bday@example.com", birthday: { month: 7, day: 21 } }, ORIGIN);
+    const saved = (await m.customers.findCustomerById(db, venue.id, fresh.customerId!))!;
+    expect([saved.birthday_month, saved.birthday_day]).toEqual([7, 21]);
+  });
+
+  it("get their birthday treat on the card and at the till on the day, with or without offers", async () => {
+    // Birthdays asked, marketing consent not asked at all.
+    const venue = await stampVenue({ crm: { enabled: true, wifiCapture: false, feedbackCapture: false, birthdayAsk: true } });
+    await m.venues.saveVenueSettings(venue.id, {
+      ...(await m.venues.getVenueSettings(venue.id)),
+      automations: { birthday: { enabled: true, offer: "A free coffee on your birthday" } },
+    });
+    // Today in the venue's own time zone (INR: India).
+    const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", month: "numeric", day: "numeric" }).formatToParts(new Date());
+    const [month, day] = ["month", "day"].map((type) => Number(today.find((part) => part.type === type)!.value));
+    const joined = await m.loyalty.enroll({ venueId: venue.id, email: "bday-today@example.com", birthday: { month, day } }, ORIGIN);
+    const db = await m.db.getDb();
+    const saved = (await m.customers.findCustomerById(db, venue.id, joined.customerId!))!;
+    expect([saved.birthday_month, saved.birthday_day]).toEqual([month, day]);
+
+    const { memberCardView } = await import("./services/card");
+    const token = new URLSearchParams(joined.cardUrl!.split("?")[1]).get("t")!;
+    const onCard = async () => (await memberCardView(joined.cardId, token, ORIGIN))!.birthdayTreat;
+    (await db.run("INSERT INTO staff_devices (id, venue_id, label) VALUES (?, ?, 'Till')", `bday_${seq}`, venue.id));
+    const device = { id: `bday_${seq}`, venueId: venue.id, label: "Till" };
+    const atTill = async () => (await m.staff.viewCard(device, joined.cardId)).birthday;
+
+    // On the day: on the card and at the till (staff check ID when it's collected).
+    expect(await onCard()).toBe("A free coffee on your birthday");
+    expect(await atTill()).toEqual({ reward: "A free coffee on your birthday", given: false });
+
+    // Given once at the till: gone from the card, marked given, and can't be given twice.
+    await m.staff.giveBirthdayReward(device, joined.cardId);
+    expect(await atTill()).toEqual({ reward: "A free coffee on your birthday", given: true });
+    expect(await onCard()).toBeNull();
+    await expect(m.staff.giveBirthdayReward(device, joined.cardId)).rejects.toThrow(/already been given/i);
+    // A slip can be undone like a stamp, and the stamps don't move.
+    const before = (await m.cards.findCardById(db, joined.cardId))!.stamps;
+    await m.staff.undoLast(device, joined.cardId);
+    expect(await atTill()).toEqual({ reward: "A free coffee on your birthday", given: false });
+    expect((await m.cards.findCardById(db, joined.cardId))!.stamps).toBe(before);
+
+    // Birthdays no longer asked: no reward either, even on the day.
+    const record = (await m.venues.getVenueRecord(venue.id))!;
+    await m.admin.updateVenue(record, { config: { crm: { ...record.config.crm, birthdayAsk: false } } });
+    expect(await onCard()).toBeNull();
+    await m.admin.updateVenue((await m.venues.getVenueRecord(venue.id))!, { config: { crm: { ...record.config.crm, birthdayAsk: true } } });
+
+    // Staff correct the date at the till: any other day, nothing shows.
+    const otherMonth = month === 1 ? 2 : 1;
+    const corrected = await m.staff.setGuestBirthday(device, joined.cardId, otherMonth, 15);
+    expect(corrected.birthdayDate).toEqual({ month: otherMonth, day: 15 });
+    expect(await onCard()).toBeNull();
+    await expect(m.staff.setGuestBirthday(device, joined.cardId, 2, 30)).rejects.toThrow(/doesn't exist/i);
+    // Changing it back can't earn a second reward this year.
+    await m.staff.setGuestBirthday(device, joined.cardId, month, day);
+    await m.staff.giveBirthdayReward(device, joined.cardId);
+    await m.staff.setGuestBirthday(device, joined.cardId, month, day);
+    expect(await atTill()).toEqual({ reward: "A free coffee on your birthday", given: true });
   });
 
   it("keep the birthday they gave first", async () => {
@@ -129,10 +260,10 @@ describe("guest erasure", () => {
   it("removes the guest, card, stamps and visits", async () => {
     const venue = await stampVenue();
     const joined = await m.loyalty.enroll({ venueId: venue.id, email: "gone@example.com" }, ORIGIN);
-    const ok = await m.db.transaction((db) => m.customers.deleteGuest(db, venue.id, joined.customerId));
+    const ok = await m.db.transaction((db) => m.customers.deleteGuest(db, venue.id, joined.customerId!));
     expect(ok).toBe(true);
     const db = await m.db.getDb();
-    expect(await m.customers.findCustomerById(db, venue.id, joined.customerId)).toBeNull();
+    expect(await m.customers.findCustomerById(db, venue.id, joined.customerId!)).toBeNull();
     expect(await m.cards.findCardById(db, joined.cardId)).toBeNull();
     expect((await db.get<{ n: number }>("SELECT COUNT(*) AS n FROM stamp_events WHERE card_id = ?", joined.cardId))!.n).toBe(0);
   });
@@ -144,17 +275,51 @@ describe("Wi-Fi gate", () => {
     const live = (await m.venues.findVenue(venue.id))!;
     expect(m.features.wifiGateActive(live)).toBe(false);
     expect(m.features.guestSafeVenue(live).wifi?.password).toBe("open-sesame");
-    await expect(m.guests.captureGuest({ venueId: venue.id, email: "no-gate@example.com", marketingConsent: false, ageAttested: false }, ORIGIN)).rejects.toThrow(/doesn't ask/);
+    await expect(m.guests.captureGuest({ venueId: venue.id, email: "no-gate@example.com" })).rejects.toThrow(/doesn't ask/);
+  });
+
+  it("counts at most one Wi-Fi visit a day, however often the gate is passed", async () => {
+    const venue = await stampVenue({
+      wifi: { ssid: "Cafe", password: "pw", security: "WPA2" },
+      crm: { enabled: true, wifiCapture: true, feedbackCapture: false, birthdayAsk: false },
+    });
+    const capture = () => m.guests.captureGuest({ venueId: venue.id, email: "repeat@example.com" });
+    const { customerId } = await capture();
+    await capture();
+    await m.guests.recordGuestVisit({ venueId: venue.id, customerId, type: "wifi_tap" });
+    const db = await m.db.getDb();
+    const visits = async () => (await db.get<{ n: number }>("SELECT COUNT(*) AS n FROM visits WHERE customer_id = ?", customerId))!.n;
+    expect(await visits()).toBe(1);
+    await db.run("UPDATE visits SET created_at = now() - INTERVAL '1 day' WHERE customer_id = ?", customerId);
+    await capture();
+    expect(await visits()).toBe(2);
+  });
+
+  it("gives a loyalty member the password with the card on their phone, no email asked", async () => {
+    const gate = { enabled: true, wifiCapture: true, feedbackCapture: false, birthdayAsk: false };
+    const venue = await stampVenue({ wifi: { ssid: "Cafe", password: "member-pass", security: "WPA2" }, crm: gate });
+    const joined = await m.loyalty.enroll({ venueId: venue.id, email: "wifi-member@example.com" }, ORIGIN);
+    const [, query] = joined.cardUrl!.split("?");
+    const card = { cardId: joined.cardId, token: new URLSearchParams(query).get("t")! };
+    expect((await m.guests.wifiPassword({ venueId: venue.id, card })).password).toBe("member-pass");
+    // A wrong token, or a card from another café, is refused.
+    await expect(m.guests.wifiPassword({ venueId: venue.id, card: { ...card, token: "x".repeat(32) } })).rejects.toThrow(/unknown guest/i);
+    const other = await stampVenue({ wifi: { ssid: "Other", password: "other-pass", security: "WPA2" }, crm: gate });
+    await expect(m.guests.wifiPassword({ venueId: other.id, card })).rejects.toThrow(/unknown guest/i);
+    // The card counts the Wi-Fi visit for its holder.
+    await m.guests.recordGuestVisit({ venueId: venue.id, card, type: "wifi_tap" });
+    const db = await m.db.getDb();
+    expect((await db.get<{ n: number }>("SELECT COUNT(*) AS n FROM visits WHERE customer_id = ?", joined.customerId))!.n).toBe(1);
   });
 
   it("keeps the password out of the page until the guest has given an email", async () => {
     const venue = await stampVenue({
       wifi: { ssid: "Cafe", password: "s3cret-pass", security: "WPA2" },
-      crm: { enabled: true, consentAsk: false, wifiCapture: true, feedbackCapture: false, birthdayAsk: false },
+      crm: { enabled: true, wifiCapture: true, feedbackCapture: false, birthdayAsk: false },
     });
     const live = (await m.venues.findVenue(venue.id))!;
     expect(m.features.guestSafeVenue(live).wifi?.password).toBeNull();
-    const captured = await m.guests.captureGuest({ venueId: venue.id, email: "wifi-guest@example.com", marketingConsent: false, ageAttested: false }, ORIGIN);
+    const captured = await m.guests.captureGuest({ venueId: venue.id, email: "wifi-guest@example.com" });
     expect((await m.guests.wifiPassword({ venueId: venue.id, customerId: captured.customerId })).password).toBe("s3cret-pass");
     await expect(m.guests.wifiPassword({ venueId: venue.id, customerId: "cus_unknown" })).rejects.toThrow(/unknown guest/i);
   });
@@ -187,6 +352,93 @@ describe("till races", () => {
     const results = await Promise.allSettled([m.staff.redeemReward(device, card.id, 0), m.staff.redeemReward(device, card.id, 0)]);
     expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
     expect((await m.cards.findCardById(db, card.id))!.stamps).toBe(0);
+  });
+});
+
+describe("joining from the guest page", () => {
+  it("needs the “I agree to join” box ticked", async () => {
+    const venue = await stampVenue();
+    const { POST } = await import("@/app/api/loyalty/enroll/route");
+    const post = (body: object) =>
+      POST(new Request("http://localhost/api/loyalty/enroll", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }), undefined);
+    const refused = await post({ venueId: venue.id, email: "no-agree@example.com", name: "Sam" });
+    expect(refused.status).toBe(400);
+    expect(((await refused.json()) as { error: string }).error).toMatch(/agree/i);
+    const joined = await post({ venueId: venue.id, email: "agrees@example.com", name: "Sam", agreed: true });
+    expect(joined.status).toBe(200);
+    const db = await m.db.getDb();
+    expect((await db.get<{ at: string | null }>("SELECT membership_agreed_at AS at FROM customers WHERE email = 'agrees@example.com'"))!.at).toBeTruthy();
+  });
+});
+
+describe("adding members at the till", () => {
+  it("signs a guest up with no consent recorded, and opens an existing member's card instead of a new one", async () => {
+    const venue = await stampVenue({ crm: { enabled: true, wifiCapture: false, feedbackCapture: false, birthdayAsk: true } });
+    const db = await m.db.getDb();
+    (await db.run("INSERT INTO staff_devices (id, venue_id, label) VALUES (?, ?, 'Till')", `enroll_${seq}`, venue.id));
+    const device = { id: `enroll_${seq}`, venueId: venue.id, label: "Till" };
+
+    const added = await m.staff.enrollAtTill(device, { name: "Priya Shah", email: " Priya@Example.com ", birthday: { month: 3, day: 14 }, agreed: true }, ORIGIN);
+    expect(added.wasExisting).toBe(false);
+    const guest = (await db.get<{ email: string; first_name: string; capture_source: string; marketing_consent: string; birthday_month: number }>(
+      "SELECT c.email, c.first_name, c.capture_source, c.marketing_consent, c.birthday_month FROM customers c JOIN loyalty_cards l ON l.customer_id = c.id WHERE l.id = ?",
+      added.cardId,
+    ))!;
+    expect(guest).toMatchObject({ email: "priya@example.com", first_name: "Priya", capture_source: "till", marketing_consent: "unasked", birthday_month: 3 });
+    // Their card email goes out.
+    expect((await db.get<{ n: number }>("SELECT COUNT(*) AS n FROM outbox WHERE recipient = 'priya@example.com'"))!.n).toBe(1);
+
+    // Staff confirmed she agreed: kept as the record of it.
+    expect((await db.get<{ at: string | null }>("SELECT membership_agreed_at AS at FROM customers WHERE email = 'priya@example.com'"))!.at).toBeTruthy();
+    const { staffEnrollRequest } = await import("@/lib/api/staff-contracts");
+    expect(staffEnrollRequest.safeParse({ name: "No Tick", email: "no-tick@example.com" }).success).toBe(false);
+
+    const again = await m.staff.enrollAtTill(device, { name: "Priya", email: "priya@example.com", agreed: true }, ORIGIN);
+    expect(again).toEqual({ cardId: added.cardId, wasExisting: true });
+    await expect(m.staff.enrollAtTill(device, { name: "X", email: "not-an-email", agreed: true }, ORIGIN)).rejects.toThrow(/email/i);
+  });
+});
+
+describe("till devices", () => {
+  it("opened from a login stop working when that account is blocked or deleted", async () => {
+    const venue = await stampVenue();
+    const db = await m.db.getDb();
+    const staffUser = await m.users.insertUser({ email: `till-user${seq}@example.com`, name: "Till", passwordHash: "x" });
+    const digest = (token: string) => createHash("sha256").update(token).digest("base64url");
+    await db.run("INSERT INTO staff_devices (id, venue_id, label, user_id) VALUES (?, ?, 'Till', ?), (?, ?, 'Counter', NULL)", digest("login-till"), venue.id, staffUser.id, digest("paired-till"), venue.id);
+    const deviceFor = async (token: string) => {
+      jar.set("tt_staff", token);
+      return await m.staff.currentStaffDevice();
+    };
+    expect((await deviceFor("login-till"))?.venueId).toBe(venue.id);
+    await m.users.setUserBlocked(staffUser.id, true);
+    expect(await deviceFor("login-till")).toBeNull();
+    // A device the owner paired directly belongs to no login, so it carries on.
+    expect((await deviceFor("paired-till"))?.venueId).toBe(venue.id);
+    await m.users.setUserBlocked(staffUser.id, false);
+    expect((await deviceFor("login-till"))?.venueId).toBe(venue.id);
+    await db.run("DELETE FROM users WHERE id = ?", staffUser.id);
+    expect(await deviceFor("login-till")).toBeNull();
+    jar.clear();
+  });
+});
+
+describe("rate limits", () => {
+  it("count hits from every instance of the app, not just this one", async () => {
+    const key = `shared-limit-${Date.now()}`;
+    await m.http.rateLimitKey(key, 3);
+    // Other instances (each with its own memory) have added two more to the shared counter.
+    const db = await m.db.getDb();
+    const id = createHash("sha256").update(`60000:${key}`).digest("base64url");
+    await db.run("UPDATE rate_limits SET hits = hits + 2 WHERE key = ?", id);
+    await expect(m.http.rateLimitKey(key, 3)).rejects.toThrow(/too many/i);
+  });
+
+  it("start counting again in the next window", async () => {
+    const key = `window-limit-${Date.now()}`;
+    await m.http.rateLimitKey(key, 1, 50);
+    await new Promise((resolve) => setTimeout(resolve, 120));
+    await expect(m.http.rateLimitKey(key, 1, 50)).resolves.toBeUndefined();
   });
 });
 

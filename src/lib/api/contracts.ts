@@ -29,11 +29,9 @@ export const enrollRequest = z.object({
   initialStamps: z.number().int().min(0).max(1).optional(),
   feedbackReceipt: feedbackReceipt.optional(),
   captureSource: z.enum(["landing", "feedback", "rewards"]).optional(),
-  /** Rewards-only join: the button press itself is the membership consent. */
-  joined: z.boolean().optional(),
   door: joinDoor.optional(),
-  marketingConsent: z.boolean().optional(),
-  ageAttested: z.boolean().optional(),
+  /** The guest ticked "I agree to join": required for every join from the guest page. */
+  agreed: z.literal(true).optional(),
   birthday: birthday.optional(),
   locale,
   /** Invite code from a member's "Invite a friend" link. */
@@ -42,18 +40,23 @@ export const enrollRequest = z.object({
 export type EnrollRequest = z.input<typeof enrollRequest>;
 
 export interface EnrollResponse {
-  customerId: string;
+  /** New members only: an email address is no proof of who's typing it, so a returning member's id isn't handed out. */
+  customerId: string | null;
   cardId: string;
   wasExisting: boolean;
   /** False when a returning member re-joined inside the resend cooldown. */
   passEmailed: boolean;
   /** Web version of the card, only to new members; a returning member is emailed it instead. */
   cardUrl: string | null;
-  /** The server asked for a double-opt-in confirmation. */
-  confirmationPending: boolean;
 }
 
-export const stampRequest = z.object({ venueId, email, feedbackReceipt });
+/** A member's card on this phone: its id and private token prove who's asking. */
+const cardProof = z.object({ cardId: z.string().trim().min(1).max(64), token: z.string().trim().min(1).max(128) });
+
+/** A member's feedback stamp: named by email (typed in), or by the card on their phone. */
+export const stampRequest = z
+  .object({ venueId, email: email.optional(), card: cardProof.optional(), feedbackReceipt })
+  .refine((input) => !!input.email || !!input.card, "Enter your email address");
 export type StampRequest = z.input<typeof stampRequest>;
 export interface StampResponse {
   stamped: boolean;
@@ -77,40 +80,45 @@ export interface FeedbackResponse {
   stampReceipt: { feedbackId: string; token: string } | null;
 }
 
-/** The Wi-Fi email gate (when the owner has it on): an email, and the consent line's answer if it was shown. */
+/** The Wi-Fi email gate (when the owner has it on): just an email for the password. */
 export const captureGuestRequest = z.object({
   venueId,
   email,
   firstName,
-  marketingConsent: z.boolean(),
-  ageAttested: z.boolean(),
   locale,
 });
 export type CaptureGuestRequest = z.input<typeof captureGuestRequest>;
 export interface CaptureGuestResponse {
   customerId: string;
-  confirmationPending: boolean;
 }
 
-/** A guest past the Wi-Fi email gate (this device knows their guest id) asks for the password. */
-export const wifiPasswordRequest = z.object({ venueId, customerId: z.string().trim().min(1).max(128) });
+/**
+ * A guest this phone knows, for the Wi-Fi gate: the guest id it was given at
+ * the gate, or the loyalty card it holds (id and private token), so a member
+ * isn't asked for their email again.
+ */
+const knownGuest = {
+  customerId: z.string().trim().min(1).max(128).optional(),
+  card: cardProof.optional(),
+};
+const namesGuest = (input: { customerId?: string; card?: unknown }) => !!input.customerId || !!input.card;
+
+/** A guest past the Wi-Fi email gate, or a card member, asks for the password. */
+export const wifiPasswordRequest = z.object({ venueId, ...knownGuest }).refine(namesGuest, "Unknown guest");
 export type WifiPasswordRequest = z.input<typeof wifiPasswordRequest>;
 export interface WifiPasswordResponse {
   password: string | null;
 }
 
-export const recordVisitRequest = z.object({
-  venueId,
-  customerId: z.string().trim().min(1).max(128),
-  type: z.enum(["wifi_tap"]),
-});
+export const recordVisitRequest = z
+  .object({
+    venueId,
+    ...knownGuest,
+    type: z.enum(["wifi_tap"]),
+  })
+  .refine(namesGuest, "Unknown guest");
 export type RecordVisitRequest = z.input<typeof recordVisitRequest>;
 
-export const birthdayRequest = z.union([
-  z.object({ venueId, customerId: z.string().min(1).max(128), month: z.number().int(), day: z.number().int() }),
-  z.object({ venueId, customerId: z.string().min(1).max(128), skipped: z.literal(true) }),
-]);
-export type BirthdayRequest = z.input<typeof birthdayRequest>;
 
 export const analyticsEvent = z.object({
   name: z.string().trim().regex(/^[a-z][a-z0-9_]{1,63}$/),
@@ -135,6 +143,8 @@ export interface MemberCardView {
   /** The code staff scan; null when the venue has no stamp card. */
   staffQrSvg: string | null;
   invite: { url: string; referrerStamps: number; friendStamps: number } | null;
+  /** The owner's birthday reward, on the member's birthday until staff give it; null otherwise. */
+  birthdayTreat: string | null;
 }
 
 export interface ApiError {

@@ -10,14 +10,7 @@ export const metadata: Metadata = { title: "Guests" };
 
 const PAGE_SIZE = 50;
 
-const CONSENT: Record<string, { label: string; tone: string }> = {
-  granted: { label: "Subscribed", tone: "badge-ok" },
-  pending: { label: "Awaiting confirmation", tone: "badge-warn" },
-  declined: { label: "No marketing", tone: "" },
-  unasked: { label: "Not asked", tone: "" },
-};
-
-const SOURCES: Record<string, string> = { landing: "Loyalty card", feedback: "After feedback", wifi: "Wi-Fi", rewards: "Members club" };
+const SOURCES: Record<string, string> = { landing: "Loyalty card", feedback: "After feedback", wifi: "Wi-Fi", rewards: "Members club", till: "At the till" };
 
 export default async function GuestsPage({ params, searchParams }: PageProps<"/dashboard/[venueId]/guests">) {
   const { venue } = await loadDashboardVenue((await params).venueId);
@@ -35,6 +28,7 @@ export default async function GuestsPage({ params, searchParams }: PageProps<"/d
         <div>
           <h1>Guests</h1>
           <p>Everyone who joined your loyalty card or left their email.</p>
+          <p className="hint">Guests agreed to their card, rewards and birthday emails, not to offers. Don&apos;t use this list or its export to send promotions.</p>
         </div>
         <a className="btn" href={`/api/dashboard/venues/${venue.id}/guests/export`}>
           <Download aria-hidden /> Export CSV
@@ -60,7 +54,6 @@ export default async function GuestsPage({ params, searchParams }: PageProps<"/d
               <thead>
                 <tr>
                   <th>Guest</th>
-                  <th>Marketing</th>
                   <th>Stamps</th>
                   <th>Birthday</th>
                   <th>Joined via</th>
@@ -70,16 +63,12 @@ export default async function GuestsPage({ params, searchParams }: PageProps<"/d
               </thead>
               <tbody>
                 {rows.map((guest) => {
-                  const consent = CONSENT[guest.marketingConsent] ?? CONSENT.unasked;
                   const displayName = guest.name || guest.firstName;
                   return (
                     <tr key={guest.id}>
                       <td>
                         {displayName && <strong style={{ display: "block" }}>{displayName}</strong>}
                         <span className={displayName ? "muted" : ""}>{guest.email}</span>
-                      </td>
-                      <td>
-                        <span className={`badge ${consent.tone}`}>{consent.label}</span>
                       </td>
                       <td>{guest.stamps ?? "–"}</td>
                       <td>{guest.birthday ?? "–"}</td>

@@ -154,7 +154,6 @@ export const loyaltySchema = z
 
 export const crmSchema = z.object({
   enabled: z.boolean(),
-  consentAsk: z.boolean(),
   wifiCapture: z.boolean(),
   feedbackCapture: z.boolean(),
   birthdayAsk: z.boolean(),
@@ -245,6 +244,6 @@ export function initialVenueConfig(input: z.output<typeof createVenueRequest>, n
       sudokuEnabled: true,
     },
     externalLinks: [],
-    crm: { enabled: false, consentAsk: false, wifiCapture: false, feedbackCapture: false, birthdayAsk: false },
+    crm: { enabled: false, wifiCapture: false, feedbackCapture: false, birthdayAsk: false },
   };
 }

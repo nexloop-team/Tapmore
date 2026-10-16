@@ -1,5 +1,4 @@
 import "server-only";
-import { runWeeklyDigest } from "./digest";
 import { runGuestAutomations } from "./guest-emails";
 import { runHousekeeping } from "./housekeeping";
 import { runMediaCleanup } from "./media-cleanup";
@@ -17,7 +16,6 @@ const FIRST_TICK_MS = 60_000;
 export async function runDueJobs(now = new Date()): Promise<Record<string, number>> {
   const results: Record<string, number> = {};
   for (const [name, job] of [
-    ["weeklyDigest", runWeeklyDigest],
     ["guestAutomations", runGuestAutomations],
     ["mediaCleanup", runMediaCleanup],
     ["housekeeping", runHousekeeping],

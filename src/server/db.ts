@@ -287,6 +287,23 @@ const MIGRATIONS: string[] = [
      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
    );
    ALTER TABLE feedback_summaries ENABLE ROW LEVEL SECURITY;`,
+  // Rate-limit counters shared by every instance of the app (see http.ts).
+  `CREATE TABLE rate_limits (
+     key TEXT PRIMARY KEY,
+     window_start BIGINT NOT NULL,
+     hits INTEGER NOT NULL,
+     expires_at TIMESTAMPTZ NOT NULL
+   );
+   CREATE INDEX rate_limits_expires ON rate_limits(expires_at);
+   ALTER TABLE rate_limits ENABLE ROW LEVEL SECURITY;`,
+  // Unsubscribing is recorded on its own (the birthday email doesn't depend on
+  // offers consent): earlier unsubscribes are the guests who had a marketing
+  // email (so a token) and then said no. The owner's weekly summary is gone.
+  `ALTER TABLE customers ADD COLUMN emails_unsubscribed_at TIMESTAMPTZ;
+   UPDATE customers SET emails_unsubscribed_at = consent_updated_at WHERE marketing_consent = 'declined' AND unsubscribe_token IS NOT NULL;
+   DROP TABLE IF EXISTS notification_prefs;`,
+  // Joining is agreeing to the membership and its emails: when, for the record.
+  `ALTER TABLE customers ADD COLUMN membership_agreed_at TIMESTAMPTZ;`,
 ];
 
 /** "2026-10-09 13:05:00.123+00" → "2026-10-09T13:05:00.123Z": ISO in UTC, so Date.parse reads it right anywhere. */

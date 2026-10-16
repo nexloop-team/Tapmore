@@ -1,5 +1,5 @@
 import { transaction } from "@/server/db";
-import { assertSameOrigin, handle, rateLimit, requestOrigin, ServiceError } from "@/server/http";
+import { assertSameOrigin, handle, rateLimit, rateLimitLocal, requestOrigin, ServiceError } from "@/server/http";
 import { deleteGuest } from "@/server/repositories/customers";
 import { publicOrigin } from "@/server/services/qr";
 import { memberCardView } from "@/server/services/card";
@@ -10,7 +10,7 @@ import { memberCardView } from "@/server/services/card";
  * this to show new stamps the moment staff add them.
  */
 export const GET = handle(async (request, ctx: RouteContext<"/api/cards/[id]">) => {
-  rateLimit(request, "card-status", 120);
+  rateLimitLocal(request, "card-status", 120);
   const { id } = await ctx.params;
   const token = new URL(request.url).searchParams.get("t") ?? "";
   const view = await memberCardView(id, token, publicOrigin(requestOrigin(request)));
@@ -21,7 +21,7 @@ export const GET = handle(async (request, ctx: RouteContext<"/api/cards/[id]">) 
 /** The member deletes their own card and details (the link is their proof): withdrawing is as easy as joining. */
 export const DELETE = handle(async (request, ctx: RouteContext<"/api/cards/[id]">) => {
   assertSameOrigin(request);
-  rateLimit(request, "card-delete", 10);
+  await rateLimit(request, "card-delete", 10);
   const { id } = await ctx.params;
   const token = new URL(request.url).searchParams.get("t") ?? "";
   const deleted = token

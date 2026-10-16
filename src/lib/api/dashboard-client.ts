@@ -11,14 +11,23 @@ import type {
   ExplainDishesRequest,
   ForgotPasswordRequest,
   LoginRequest,
-  NotificationPrefsRequest,
   ResetPasswordRequest,
   SignupRequest,
   UpdateAccountRequest,
   UpdateVenueRequest,
 } from "./account-contracts";
 import { ApiRequestError } from "./client";
-import type { AddStaffDeviceRequest, StaffCardView, StaffRedeemRequest, StaffStampRequest, StaffUndoRequest } from "./staff-contracts";
+import type {
+  AddStaffDeviceRequest,
+  StaffBirthdayDateRequest,
+  StaffBirthdayRequest,
+  StaffCardView,
+  StaffEnrollRequest,
+  StaffEnrollResponse,
+  StaffRedeemRequest,
+  StaffStampRequest,
+  StaffUndoRequest,
+} from "./staff-contracts";
 import type { CreateVenueRequest, VenueConfig } from "../venue/schema";
 
 type MenuSectionDraft = VenueConfig["menus"][number]["sections"][number];
@@ -57,7 +66,6 @@ export const dashboardApi = {
   updateAccount: (body: UpdateAccountRequest) => send<{ ok: true }>("PATCH", "/api/account", body),
   changePassword: (body: ChangePasswordRequest) => send<{ ok: true }>("POST", "/api/account/password", body),
   deleteAccount: (body: DeleteAccountRequest) => send<{ ok: true }>("DELETE", "/api/account", body),
-  setNotifications: (body: NotificationPrefsRequest) => send<{ ok: true }>("PATCH", "/api/account/notifications", body),
 
   createVenue: (body: CreateVenueRequest) => send<{ id: string; shortCode: string }>("POST", "/api/dashboard/venues", body),
   updateVenue: (venueId: string, body: UpdateVenueRequest) => send<SavedVenue>("PATCH", `/api/dashboard/venues/${venueId}`, body),
@@ -110,6 +118,9 @@ export const dashboardApi = {
   staffStamp: (body: StaffStampRequest) => send<StaffCardView>("POST", "/api/staff/stamp", body),
   staffRedeem: (body: StaffRedeemRequest) => send<StaffCardView>("POST", "/api/staff/redeem", body),
   staffUndo: (body: StaffUndoRequest) => send<StaffCardView>("POST", "/api/staff/undo", body),
+  staffBirthday: (body: StaffBirthdayRequest) => send<StaffCardView>("POST", "/api/staff/birthday", body),
+  staffBirthdayDate: (body: StaffBirthdayDateRequest) => send<StaffCardView>("POST", "/api/staff/birthday-date", body),
+  staffEnroll: (body: StaffEnrollRequest) => send<StaffEnrollResponse>("POST", "/api/staff/enroll", body),
 };
 
 export function errorMessage(error: unknown): string {

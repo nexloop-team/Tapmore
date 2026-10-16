@@ -3,33 +3,31 @@
 import { useState, type ReactNode } from "react";
 import { api } from "@/lib/api/client";
 import type { FeedbackResponse } from "@/lib/api/contracts";
-import { cardCredentialsFromUrl, deviceMemory, parseCardCredentials, type CardCredentials } from "@/lib/browser";
 import { enrolEmailCopy } from "@/lib/landing-copy";
 import { isPlausibleEmail, maskEmail, normaliseEmail } from "@/lib/validation";
-import { Field, SuccessPanel, JoinedCard } from "../forms";
+import { birthdayAskOn } from "@/lib/venue/features";
+import { BirthdayFields, EMPTY_BIRTHDAY, Field, JoinAgreement, StatusRow, birthdayAnswer } from "../forms";
 import { useLanding } from "../LandingContext";
-import { MyCard } from "../loyalty/MyCard";
 import { useStampJoin } from "../useJoin";
 
-type Outcome =
-  | { kind: "enrolled"; node: ReactNode }
-  | { kind: "stamped"; card: CardCredentials | null }
-  | { kind: "not_stamped"; card: CardCredentials | null };
+type Outcome = { kind: "enrolled"; node: string } | { kind: "stamped" } | { kind: "not_stamped" };
 
 /**
  * The thank-you's loyalty ask: "you've earned a free stamp, join to claim it".
  * A new member is enrolled with the stamp; an existing member is stamped
  * instead (the join endpoint never adds stamps to an existing card).
  */
-export function FreeStampJoin({ receipt }: { receipt: NonNullable<FeedbackResponse["stampReceipt"]> }) {
+export function FreeStampJoin({ receipt, after }: { receipt: NonNullable<FeedbackResponse["stampReceipt"]>; after?: ReactNode }) {
   const { venue, t, tf, track, setLoyaltyDone } = useLanding();
   const join = useStampJoin();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [agreed, setAgreed] = useState(false);
+  const [birthday, setBirthday] = useState(EMPTY_BIRTHDAY);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
-  const valid = name.trim().length > 0 && isPlausibleEmail(email);
+  const valid = name.trim().length > 0 && isPlausibleEmail(email) && agreed;
 
   async function submit() {
     if (!valid) {
@@ -39,7 +37,15 @@ export function FreeStampJoin({ receipt }: { receipt: NonNullable<FeedbackRespon
     track("loyalty_signup_started", { from_context: "feedback_thankyou" });
     setBusy(true);
     setError(null);
-    const result = await join({ name, email, initialStamps: 1, captureSource: "feedback", feedbackReceipt: receipt });
+    const result = await join({
+      name,
+      email,
+      initialStamps: 1,
+      captureSource: "feedback",
+      feedbackReceipt: receipt,
+      agreed,
+      birthday: birthdayAskOn(venue) ? birthdayAnswer(birthday) : null,
+    });
     if (!result.ok) {
       setBusy(false);
       setError(t(result.error));
@@ -50,12 +56,7 @@ export function FreeStampJoin({ receipt }: { receipt: NonNullable<FeedbackRespon
       track("loyalty_signup_completed", { from_context: "feedback_thankyou" });
       setOutcome({
         kind: "enrolled",
-        node: (
-          <>
-            <p>{enrolEmailCopy(response, result.email, t, tf)}</p>
-            <JoinedCard response={response} />
-          </>
-        ),
+        node: response.passEmailed ? tf("pass_on_its_way", { email: maskEmail(result.email) }) : enrolEmailCopy(response, result.email, t, tf),
       });
       return;
     }
@@ -66,9 +67,8 @@ export function FreeStampJoin({ receipt }: { receipt: NonNullable<FeedbackRespon
         track("loyalty_stamp_from_feedback", { current_stamps: stamp.currentStamps });
         setLoyaltyDone();
       }
-      // Already a member: show their card here if this phone knows it; otherwise it's on its way by email.
-      const card = cardCredentialsFromUrl(response.cardUrl) ?? parseCardCredentials(deviceMemory.cardRaw(venue.id));
-      setOutcome({ kind: stamp.stamped ? "stamped" : "not_stamped", card });
+      // Already a member: their card is on its way by email (and on the venue's page on this phone).
+      setOutcome({ kind: stamp.stamped ? "stamped" : "not_stamped" });
     } catch {
       setBusy(false);
       setError(t("something_wrong"));
@@ -79,27 +79,28 @@ export function FreeStampJoin({ receipt }: { receipt: NonNullable<FeedbackRespon
     return (
       <>
         {outcome.kind === "enrolled" && (
-          <SuccessPanel icon="heart" title={t("youre_enrolled")}>
+          <StatusRow icon="heart" title={t("youre_enrolled")}>
             {outcome.node}
-          </SuccessPanel>
+          </StatusRow>
         )}
         {outcome.kind === "stamped" && (
-          <SuccessPanel icon="heart" title={t("stamp_added")}>
-            {outcome.card ? <MyCard credentials={outcome.card} /> : <p>{tf("pass_sent_to", { email: maskEmail(normaliseEmail(email)) })}</p>}
-          </SuccessPanel>
+          <StatusRow icon="stamp" title={t("stamp_added")}>
+            {t("stamp_added_body")}
+          </StatusRow>
         )}
         {outcome.kind === "not_stamped" && (
-          <SuccessPanel icon="heart">
-            <p>{t("no_stamp_this_time")}</p>
-            {outcome.card ? <MyCard credentials={outcome.card} /> : <p>{tf("pass_sent_to", { email: maskEmail(normaliseEmail(email)) })}</p>}
-          </SuccessPanel>
+          <StatusRow icon="info" title={t("feedback_stamp_used")}>
+            {t("feedback_stamp_used_body")}
+          </StatusRow>
         )}
+        {/* Joined: now the Google review ask, rather than the card (it's on the venue's page already). */}
+        {after}
       </>
     );
   }
 
   return (
-    <>
+    <div className="thanks-join">
       <p>{tf("earn_rewards_visit", { business: venue.name })}</p>
       <form
         className="form-stack"
@@ -115,6 +116,13 @@ export function FreeStampJoin({ receipt }: { receipt: NonNullable<FeedbackRespon
         <Field label={t("email_address")}>
           <input className="text-input" type="email" autoComplete="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} />
         </Field>
+        {birthdayAskOn(venue) && (
+          <div className="birthday-block">
+            <p className="g-field-label">{t("birthday_optional")}</p>
+            <BirthdayFields value={birthday} onChange={setBirthday} />
+          </div>
+        )}
+        <JoinAgreement checked={agreed} onChange={setAgreed} />
         <button type="submit" className={`primary-btn${busy ? " busy" : ""}`} disabled={!valid || busy}>
           {busy ? t("enrolling") : t("join_free_stamp")}
         </button>
@@ -124,6 +132,6 @@ export function FreeStampJoin({ receipt }: { receipt: NonNullable<FeedbackRespon
           {error}
         </p>
       )}
-    </>
+    </div>
   );
 }

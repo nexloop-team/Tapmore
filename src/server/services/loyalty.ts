@@ -7,24 +7,29 @@ import { birthdayAskOn, hasLoyaltyProgram, isRewardsOnly } from "@/lib/venue/fea
 import { programTiers, stampGoal } from "@/lib/venue/loyalty";
 import type { PublicVenue } from "@/lib/venue/types";
 import { getDb, transaction } from "../db";
-import { ServiceError } from "../http";
-import { findCustomerByEmail, setBirthday, upsertCustomer } from "../repositories/customers";
+import { ServiceError, underLimit } from "../http";
+import { findCustomerByEmail, recordMembershipAgreement, setBirthday, upsertCustomer } from "../repositories/customers";
 import { claimFeedbackStamp } from "../repositories/feedback";
-import { addFeedbackStamp, createCard, findCardByCustomer, hoursSince, lockCard, markPassEmailed, setCardStamps, type LoyaltyCardRow } from "../repositories/loyalty-cards";
+import { addFeedbackStamp, createCard, findCardByCustomer, findCardHolder, lockCard, markPassEmailed, setCardStamps, type LoyaltyCardRow } from "../repositories/loyalty-cards";
 import { attachReferral, findReferrerCard } from "../repositories/retention";
 import { recordStampEvent } from "../repositories/stamps";
 import { friendJoinBonus } from "./retention";
 import { findVenue, getVenueSettings } from "../repositories/venues";
-import { deliver, recordConsent } from "./consent";
 import { sendMail } from "./mailer";
 
 /**
- * A returning member is emailed their card link again (never shown it on the
- * page, since anyone can type an email), at most this often.
+ * A returning member (a new phone, a lost card) is emailed their card link
+ * again straight away, never shown it on the page, since anyone can type an
+ * email. Capped per card, so typing someone's address can't flood their inbox.
  */
-const PASS_RESEND_COOLDOWN_HOURS = 1;
-/** One feedback stamp per member per day. */
-const FEEDBACK_STAMP_COOLDOWN_HOURS = 24;
+const PASS_RESENDS_PER_HOUR = 3;
+const PASS_RESENDS_PER_DAY = 6;
+const HOUR_MS = 60 * 60_000;
+
+async function passResendAllowed(cardId: string): Promise<boolean> {
+  return (await underLimit(`pass-resend-hour:${cardId}`, PASS_RESENDS_PER_HOUR, HOUR_MS))
+    && (await underLimit(`pass-resend-day:${cardId}`, PASS_RESENDS_PER_DAY, 24 * HOUR_MS));
+}
 
 async function requireVenue(venueId: string): Promise<PublicVenue> {
   const venue = await findVenue(venueId);
@@ -40,11 +45,21 @@ async function sendCardEmail(venue: PublicVenue, email: string, card: LoyaltyCar
   return await sendMail({
     to: email,
     subject: `Your ${venue.name} rewards card`,
-    text: `Here's your ${venue.name} card. Keep this link handy and show it when you visit:\n${cardUrl(origin, card)}`,
+    // Also the notice for guests signed up at the till, who never saw the join form.
+    text: [
+      `Here's your ${venue.name} card. Keep this link handy and show it when you visit:`,
+      cardUrl(origin, card),
+      "",
+      `You joined ${venue.name}'s membership, so your card, rewards and a birthday wish come by email. You can delete your card and details any time from the bottom of your card.`,
+      `Privacy notice: ${origin}/privacy`,
+    ].join("\n"),
   });
 }
 
-export async function enroll(input: z.output<typeof enrollRequest>, origin: string): Promise<EnrollResponse> {
+/** A join from the guest page, or from the till ("till": staff signed the guest up at the counter). */
+type EnrollInput = Omit<z.output<typeof enrollRequest>, "captureSource"> & { captureSource?: z.output<typeof enrollRequest>["captureSource"] | "till" };
+
+export async function enroll(input: EnrollInput, origin: string): Promise<EnrollResponse> {
   const venue = await requireVenue(input.venueId);
   const rewardsOnly = isRewardsOnly(venue);
   if (!hasLoyaltyProgram(venue) && !rewardsOnly) throw new ServiceError(400, "This venue does not have a loyalty program");
@@ -53,12 +68,6 @@ export async function enroll(input: z.output<typeof enrollRequest>, origin: stri
   if (input.door === "feedback" && !venue.crm.feedbackCapture) throw new ServiceError(403, "Joining is not available here");
 
   const isRewardsJoin = input.captureSource === "rewards";
-  // On a rewards join the button press is the consent; the age line gates it.
-  const consentAnswer = isRewardsJoin
-    ? { marketingConsent: !!input.joined, ageAttested: !!input.ageAttested }
-    : input.marketingConsent === undefined
-      ? null
-      : { marketingConsent: input.marketingConsent, ageAttested: !!input.ageAttested };
 
   const feedbackStampOn = (await getVenueSettings(venue.id)).stampPolicy.feedbackStamp;
 
@@ -95,19 +104,19 @@ export async function enroll(input: z.output<typeof enrollRequest>, origin: stri
         card = (await findCardByCustomer(db, customer.id))!;
       }
     }
-    const consent = await recordConsent(db, venue, customer, consentAnswer, origin);
-    const consented = !!consentAnswer?.marketingConsent && !!consentAnswer.ageAttested;
-    if (input.birthday && consented && birthdayAskOn(venue) && isValidBirthday(input.birthday.month, input.birthday.day)) {
+    if (input.agreed) await recordMembershipAgreement(db, customer.id);
+    // The birthday is for the treat at the counter (and by email only with consent).
+    // Only on a new card: re-joining with someone else's email mustn't set their birthday.
+    if (!wasExisting && input.birthday && birthdayAskOn(venue) && isValidBirthday(input.birthday.month, input.birthday.day)) {
       await setBirthday(db, customer.id, input.birthday.month, input.birthday.day);
     }
-    return { customer, card, wasExisting, consent };
+    return { customer, card, wasExisting };
   });
 
-  const { customer, card, wasExisting, consent } = result;
-  const shouldEmail = !wasExisting || hoursSince(card.last_pass_email_at) >= PASS_RESEND_COOLDOWN_HOURS;
+  const { customer, card, wasExisting } = result;
+  const shouldEmail = !wasExisting || await passResendAllowed(card.id);
   const passEmailed = shouldEmail && await sendCardEmail(venue, customer.email, card, origin);
   if (passEmailed) await markPassEmailed(await getDb(), card.id);
-  await deliver(consent.mail);
 
   // A returning member is sent their card again by email rather than shown
   // it here: an email address is no proof of who's typing it, and the card's
@@ -115,12 +124,11 @@ export async function enroll(input: z.output<typeof enrollRequest>, origin: stri
   // them by name or email.
 
   return {
-    customerId: customer.id,
+    customerId: wasExisting ? null : customer.id,
     cardId: card.id,
     wasExisting,
     passEmailed,
     cardUrl: wasExisting ? null : cardUrl(origin, card),
-    confirmationPending: consent.confirmationPending,
   };
 }
 
@@ -143,10 +151,13 @@ export async function stampForFeedback(input: z.output<typeof stampRequest>): Pr
   if (!(await getVenueSettings(venue.id)).stampPolicy.feedbackStamp) return refused;
   const goal = stampGoal(programTiers(venue.loyaltyProgram));
   return await transaction(async (db) => {
-    const customer = await findCustomerByEmail(db, venue.id, input.email);
+    const holder = input.card ? await findCardHolder(db, venue.id, input.card.cardId, input.card.token) : null;
+    const customer = holder ? { id: holder } : input.email ? await findCustomerByEmail(db, venue.id, input.email) : null;
     const found = customer ? await findCardByCustomer(db, customer.id) : null;
     const card = found ? await lockCard(db, found.id) : null;
-    if (!card || hoursSince(card.last_feedback_stamp_at) < FEEDBACK_STAMP_COOLDOWN_HOURS) return refused;
+    // Once per member, ever: feedback can be sent from anywhere, so it can't keep earning stamps.
+    // Joining after feedback with its free stamp counts as that once.
+    if (!card || card.last_feedback_stamp_at) return refused;
     if (!(await claimFeedbackStamp(db, venue.id, input.feedbackReceipt.feedbackId, input.feedbackReceipt.token))) return refused;
     return { stamped: true, currentStamps: await addFeedbackStamp(db, card.id, goal) };
   });

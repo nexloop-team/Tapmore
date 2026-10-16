@@ -29,7 +29,11 @@ export function liveAnnouncement(announcement: PublicVenue["announcement"], toda
 
 /** A stamp card programme (the common case). */
 export function hasLoyaltyProgram(venue: PublicVenue): boolean {
-  const lp = venue.loyaltyProgram;
+  return isStampCard(venue.loyaltyProgram);
+}
+
+/** The same check on the programme alone, for code that hasn't loaded the whole venue. */
+export function isStampCard(lp: PublicVenue["loyaltyProgram"] | undefined): boolean {
   return !!lp && lp.stampsEnabled !== false && !!lp.rewardName;
 }
 
@@ -76,11 +80,7 @@ export function guestSafeVenue(venue: PublicVenue): PublicVenue {
   return { ...venue, wifi: { ...venue.wifi, password: null } };
 }
 
-export function consentAskOn(venue: PublicVenue): boolean {
-  return venue.crm.enabled && venue.crm.consentAsk;
-}
-
-export function birthdayAskOn(venue: PublicVenue): boolean {
+export function birthdayAskOn(venue: Pick<PublicVenue, "crm">): boolean {
   return venue.crm.enabled && venue.crm.birthdayAsk;
 }
 

@@ -2,11 +2,11 @@
 
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useState, type FormEvent } from "react";
 import { dashboardApi, errorMessage } from "@/lib/api/dashboard-client";
 import { CURRENCIES, VENUE_TYPES, type VenueConfig } from "@/lib/venue/schema";
 import { useConfirm } from "./confirm";
-import { Card, Field, SaveBar, SwitchRow, TextField } from "./ui";
+import { Card, Field, SaveBar, TextField } from "./ui";
 import { useVenueDraft } from "./useVenueDraft";
 
 type Basics = Pick<VenueConfig, "name" | "venueType" | "currencyCode">;
@@ -128,37 +128,8 @@ export function DeleteVenueForm({ venueId, name }: { venueId: string; name: stri
   );
 }
 
-/** One switch per venue for the Monday digest; saves as soon as it's flipped. */
-export function DigestSwitches({ venues }: { venues: { id: string; name: string; enabled: boolean }[] }) {
-  const [state, setState] = useState(() => Object.fromEntries(venues.map((venue) => [venue.id, venue.enabled])));
-  const [error, setError] = useState<string | null>(null);
-  if (venues.length === 0) return null;
-  return (
-    <Card title="Email notifications" description="A short email every Monday morning with last week's scans, guests, stamps and feedback.">
-      {venues.map((venue) => (
-        <SwitchRow
-          key={venue.id}
-          title={`Weekly summary for ${venue.name}`}
-          checked={state[venue.id]}
-          onChange={async (on) => {
-            setState((s) => ({ ...s, [venue.id]: on }));
-            setError(null);
-            try {
-              await dashboardApi.setNotifications({ venueId: venue.id, weeklyDigest: on });
-            } catch (err) {
-              setState((s) => ({ ...s, [venue.id]: !on }));
-              setError(errorMessage(err));
-            }
-          }}
-        />
-      ))}
-      <Status error={error} done={null} />
-    </Card>
-  );
-}
-
-/** Profile, then `notifications`, then password and deletion (which stays last). */
-export function AccountForms({ name, email, notifications }: { name: string; email: string; notifications?: ReactNode }) {
+/** Profile, then password and deletion (which stays last). */
+export function AccountForms({ name, email }: { name: string; email: string }) {
   const router = useRouter();
   const profile = useAction();
   const password = useAction();
@@ -197,7 +168,6 @@ export function AccountForms({ name, email, notifications }: { name: string; ema
         </form>
       </Card>
 
-      {notifications}
 
       <Card
         title="Password"

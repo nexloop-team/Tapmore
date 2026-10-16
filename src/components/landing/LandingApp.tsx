@@ -4,7 +4,7 @@ import { Megaphone } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createTracker } from "@/lib/analytics";
-import { deviceMemory, parseCardCredentials, subscribeNever, type CardCredentials } from "@/lib/browser";
+import { deviceMemory, parseCardCredentials, subscribeStorage, type CardCredentials } from "@/lib/browser";
 import { createTranslator, type Locale } from "@/lib/i18n";
 import { linkLabel } from "@/lib/landing-copy";
 import { rememberReferral } from "@/lib/referral";
@@ -28,6 +28,7 @@ import { AppDialog } from "./AppDialog";
 import { ActionCard, ExpandableCard, LinkCard, useSheet, type TileSpec } from "./FeatureCard";
 import { FeedbackTile, LinkTile, LoyaltyTile, MenuTile, ReviewTile, SudokuTile, tileSizes, useWifiCopy, WifiTile } from "./tiles";
 import { MyCard } from "./loyalty/MyCard";
+import { useKnownGuestWifi } from "./wifi/useKnownGuestWifi";
 import { FEEDBACK_TEXTAREA_ID, FeedbackSheet } from "./feedback/FeedbackSheet";
 import { LandingContext, useLanding, type DialogContent, type LandingSession, type Membership } from "./LandingContext";
 import { LoyaltySheet } from "./loyalty/LoyaltySheet";
@@ -97,10 +98,8 @@ function MenuCardIcon({ token, custom }: { token: string | null | undefined; cus
 /** Polls only while the sheet is open. */
 function MyCardSheet({ credentials, onMissing }: { credentials: CardCredentials; onMissing: () => void }) {
   const { isOpen } = useSheet();
-  const { membership, t } = useLanding();
   return (
     <div className="sheet-inner">
-      {membership?.response.confirmationPending && <p className="confirm-notice">{t("check_inbox_confirm")}</p>}
       <MyCard credentials={credentials} active={isOpen} onMissing={onMissing} />
     </div>
   );
@@ -110,12 +109,15 @@ function FeatureList({ features }: { features: FeatureKey[] }) {
   const { venue, t, track, theme, feedbackVariant } = useLanding();
   const review = useGoogleReview();
   const router = useRouter();
-  // A member who joined (or opened their card link) on this device sees their card here.
-  const storedCardRaw = useSyncExternalStore(subscribeNever, () => deviceMemory.cardRaw(venue.id), () => null);
-  const [cardGone, setCardGone] = useState(false);
-  const storedCard = useMemo(() => (cardGone ? null : parseCardCredentials(storedCardRaw)), [storedCardRaw, cardGone]);
-  const forgetCard = useCallback(() => setCardGone(true), []);
-  const wifiCopy = useWifiCopy();
+  // A member who joined (or opened their card link) on this device sees their card here,
+  // including when the link from their email opened in another tab while this page was open.
+  const storedCardRaw = useSyncExternalStore(subscribeStorage, () => deviceMemory.cardRaw(venue.id), () => null);
+  // A stored card the server no longer knows; a different card saved later still shows.
+  const [goneRaw, setGoneRaw] = useState<string | null>(null);
+  const storedCard = useMemo(() => (goneRaw !== null && goneRaw === storedCardRaw ? null : parseCardCredentials(storedCardRaw)), [storedCardRaw, goneRaw]);
+  const forgetCard = useCallback(() => setGoneRaw(storedCardRaw), [storedCardRaw]);
+  const memberWifi = useKnownGuestWifi(storedCard);
+  const wifiCopy = useWifiCopy(memberWifi.password);
 
   // Grid layout: bento tiles in the venue's tile shades, opening bottom sheets.
   const bento = venue.branding.layout === "grid";
@@ -198,8 +200,8 @@ function FeatureList({ features }: { features: FeatureKey[] }) {
 
           case "wifi": {
             const wifiLabel = customFeatureLabel(venue, "wifi") ?? t("feature_wifi");
-            // A tile with nothing to ask first just copies the password.
-            if (bento && wifiCopy.canCopy && !wifiGateActive(venue)) {
+            // A tile with nothing to ask first just copies the password: no gate, or a guest this phone already knows.
+            if (bento && wifiCopy.canCopy && (!wifiGateActive(venue) || memberWifi.password)) {
               return (
                 <ActionCard
                   key={feature}
@@ -207,10 +209,11 @@ function FeatureList({ features }: { features: FeatureKey[] }) {
                   label={`${wifiLabel}: ${wifiCopy.status}`}
                   icon={null}
                   tint={null}
-                  tile={tile(feature, "pop", <WifiTile label={wifiLabel} status={wifiCopy.status} />)}
+                  tile={tile(feature, "pop", <WifiTile label={wifiLabel} status={wifiCopy.status} unlocked={!!memberWifi.password} />)}
                   onActivate={() => {
                     tapped();
                     void wifiCopy.copy();
+                    if (memberWifi.password) memberWifi.recordVisit();
                   }}
                 />
               );
@@ -356,7 +359,7 @@ export function LandingApp({ venue: savedVenue, locale, source, feedbackVariant,
   const features = useMemo(() => buildFeatures(venue), [venue]);
 
   // Device memory lives in localStorage, which the server can't see.
-  const rememberedCustomerId = useSyncExternalStore(subscribeNever, () => deviceMemory.customerId(venue.id), () => null);
+  const rememberedCustomerId = useSyncExternalStore(subscribeStorage, () => deviceMemory.customerId(venue.id), () => null);
   const [joinedCustomerId, setJoinedCustomerId] = useState<string | null>(null);
   const knownCustomerId = joinedCustomerId ?? rememberedCustomerId;
   const [membership, setMembership] = useState<Membership | null>(null);

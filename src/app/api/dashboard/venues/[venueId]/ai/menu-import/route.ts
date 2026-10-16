@@ -20,7 +20,7 @@ const MEDIA_TYPES: Record<string, MenuFile["mediaType"]> = { jpg: "image/jpeg", 
 export const POST = handle(async (request, ctx: RouteContext<"/api/dashboard/venues/[venueId]/ai/menu-import">) => {
   const { venue } = await venueFromRequest(request, (await ctx.params).venueId, { write: true });
   if (!await venueHasAccess(venue.id)) throw new ServiceError(402, "Your subscription has ended. Renew it on the Billing page to use this.");
-  rateLimit(request, "ai-import", 6);
+  await rateLimit(request, "ai-import", 6);
 
   let entries: FormDataEntryValue[];
   try {

@@ -12,10 +12,10 @@ function cell(value: string | number | null): string {
 export const GET = handle(async (request, ctx: RouteContext<"/api/dashboard/venues/[venueId]/guests/export">) => {
   const { venue } = await venueFromRequest(request, (await ctx.params).venueId);
   const { rows } = await listGuests(venue.id, { limit: 100_000 });
-  const header = ["email", "first_name", "name", "marketing_consent", "birthday_dd_mm", "stamps", "visits", "source", "joined_utc"];
+  const header = ["email", "first_name", "name", "birthday_dd_mm", "stamps", "visits", "source", "joined_utc"];
   const lines = [header.join(",")];
   for (const row of rows) {
-    lines.push([row.email, row.firstName, row.name, row.marketingConsent, row.birthday, row.stamps, row.visits, row.captureSource, row.createdAt].map(cell).join(","));
+    lines.push([row.email, row.firstName, row.name, row.birthday, row.stamps, row.visits, row.captureSource, row.createdAt].map(cell).join(","));
   }
   return new Response(`${lines.join("\r\n")}\r\n`, {
     headers: {

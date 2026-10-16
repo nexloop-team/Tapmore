@@ -5417,6 +5417,84 @@ body:has(.app) {
 .till-ready > span span {
   font-size: 13px;
 }
+.reward-where {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--a-surface-2);
+  font-size: 13px;
+  color: var(--a-text-2);
+}
+.reward-where h3 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--a-text);
+}
+.reward-where p {
+  margin: 0 0 4px;
+}
+.reward-where ul {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-left: 18px;
+}
+.till-birthday {
+  background: #fbebdd;
+  color: #7a3610;
+}
+.till-enroll {
+  display: grid;
+  gap: 14px;
+}
+.till-enroll .field {
+  display: grid;
+  gap: 6px;
+  font-size: 14px;
+}
+.till-agree {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-size: 14px;
+}
+.till-agree input {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  margin-top: 1px;
+}
+.till-enroll-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.till-title {
+  margin: 4px 0 12px;
+  font-size: 22px;
+}
+.till-birthday-line {
+  margin-top: 2px;
+}
+.till-birthday-edit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--a-surface-2);
+  font-size: 14px;
+}
+.till-birthday-edit > span {
+  flex-basis: 100%;
+}
+.till-birthday.given {
+  background: var(--a-surface-2);
+  color: var(--a-text-2);
+}
 .till-recent {
   padding: 10px 14px;
   border-radius: 12px;

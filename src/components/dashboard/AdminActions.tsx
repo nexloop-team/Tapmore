@@ -328,7 +328,7 @@ export function AdminUserActions({
                 run: update("block"),
                 question: {
                   title: `Block ${email}?`,
-                  body: "They're signed out everywhere and can't sign in. Their venues stay online; suspend those separately if you need to.",
+                  body: "They're signed out everywhere and can't sign in, and tills opened from their login stop working. Their venues stay online; suspend those separately if you need to.",
                   confirmLabel: "Block account",
                   danger: true,
                 },

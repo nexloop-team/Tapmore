@@ -5,7 +5,7 @@ import { verifyCaptcha } from "@/server/services/captcha";
 
 export const POST = handle(async (request) => {
   assertSameOrigin(request);
-  rateLimit(request, "forgot", 5);
+  await rateLimit(request, "forgot", 5);
   const { email, captchaToken } = await parseBody(request, forgotPasswordRequest);
   await verifyCaptcha(captchaToken, request);
   await requestPasswordReset(email, requestOrigin(request));

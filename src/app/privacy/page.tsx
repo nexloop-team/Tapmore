@@ -53,18 +53,13 @@ export default async function PrivacyPage() {
           <tbody>
             <tr>
               <td>Join the loyalty card or members&apos; club</td>
-              <td>Email, the name you type, stamps, rewards, visits</td>
-              <td>Run your card, let staff find and stamp it, email you your card and tell you when a reward is ready</td>
+              <td>Email, the name you type, stamps, rewards, visits, and your birthday if you give it (day and month, never the year)</td>
+              <td>Run your card, let staff find and stamp it, email you your card, tell you when a reward is ready, and on your birthday offer you a treat at the venue and email you a birthday wish (you can unsubscribe from it)</td>
             </tr>
             <tr>
               <td>Give your email for the Wi-Fi (if the venue asks)</td>
               <td>Email, first name, the visit</td>
-              <td>Show you the Wi-Fi password and count your visits</td>
-            </tr>
-            <tr>
-              <td>Tick &ldquo;Email me offers&rdquo; and confirm by email</td>
-              <td>Your consent, and if you choose, your birthday (day and month, never the year)</td>
-              <td>Send the venue&apos;s offers and news, a birthday treat and a &ldquo;we miss you&rdquo; note</td>
+              <td>Show you the Wi-Fi password and count your visits (at most one a day)</td>
             </tr>
             <tr>
               <td>Leave feedback</td>
@@ -85,10 +80,13 @@ export default async function PrivacyPage() {
 
       <h3>Consent, and taking it back</h3>
       <ul>
-        <li>Joining a card or getting on the Wi-Fi never requires agreeing to offers.</li>
-        <li>You only get offers if you tick the box <em>and</em> confirm from the email we send. Each offer email has a one-tap unsubscribe link.</li>
         <li>
-          You can delete your card and everything on it yourself, at any time, from the link at the bottom of your card&apos;s page. That
+          To join a venue&apos;s card you tick the &ldquo;agree to join&rdquo; box: that&apos;s your agreement to the membership and its emails (your
+          card, rewards and a birthday wish). Getting on the Wi-Fi never needs it.
+        </li>
+        <li>Each birthday email has a one-tap unsubscribe link. Unsubscribing stops them; your card keeps working.</li>
+        <li>
+          You can delete your card and everything on it yourself, at any time, from the link at the bottom of your card (open it on the venue&apos;s page). That
           withdraws your consent and erases your details at that venue.
         </li>
       </ul>
@@ -96,14 +94,13 @@ export default async function PrivacyPage() {
       <h3>Age</h3>
       <p>
         Under the DPDP Act anyone under 18 is a child, whose data needs a parent&apos;s consent. Guests at Indian venues confirm they&apos;re 18
-        or older before agreeing to offers. If you&apos;re under 18, please don&apos;t join or give your email without your parent or guardian.
+        or older when they join. If you&apos;re under 18, please don&apos;t join or give your email without your parent or guardian.
       </p>
 
       <h3>On your phone</h3>
       <p>
         We don&apos;t use advertising or tracking cookies. The page stores a few small values on your phone: which card or guest ID is yours
-        at this venue (so you don&apos;t have to join again), a random visit ID that resets after 30 minutes without use, and whether you&apos;ve
-        answered the birthday question.
+        at this venue (so you don&apos;t have to join again), and a random visit ID that resets after 30 minutes without use.
       </p>
 
       <h3>How long it&apos;s kept</h3>
@@ -118,7 +115,7 @@ export default async function PrivacyPage() {
       <ul>
         <li>
           <strong>Account:</strong> your name, email and password (stored only as a one-way hash), and which venues you run or work at. Used to
-          sign you in, run your venues and send service, security and billing emails, including a weekly summary you can switch off.
+          sign you in, run your venues and send service, security and billing emails.
         </li>
         <li>
           <strong>Billing:</strong> your subscription status and Razorpay&apos;s customer and subscription IDs. Card, UPI and bank details go to

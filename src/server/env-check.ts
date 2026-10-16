@@ -23,7 +23,7 @@ function productionConfigProblems(env: NodeJS.ProcessEnv = process.env): ConfigP
   if (has("DATABASE_URL") && env.VERCEL && /pooler\.supabase\.com:5432\//.test(env.DATABASE_URL!)) {
     error("DATABASE_URL uses Supabase's Session pooler (port 5432), which allows only a few connections: on Vercel use the Transaction pooler (port 6543).");
   }
-  if (env.VERCEL && !has("CRON_SECRET")) error("CRON_SECRET is not set: on Vercel, the daily jobs (Monday summary, guest emails, clean-up) only run through Vercel Cron, which needs it.");
+  if (env.VERCEL && !has("CRON_SECRET")) error("CRON_SECRET is not set: on Vercel, the daily jobs (birthday emails, clean-up) only run through Vercel Cron, which needs it.");
   if (!has("DATABASE_URL")) warn("DATABASE_URL is not set, so the embedded database in DATA_DIR is used. It needs a persistent volume and backups.");
   else if (!has("DATABASE_SSL_CA") && !["verify", "off"].includes(env.DATABASE_SSL ?? "")) {
     warn("The database connection is encrypted but its certificate isn't checked. Set DATABASE_SSL_CA (Supabase: Database settings → SSL certificate).");
@@ -43,7 +43,7 @@ function productionConfigProblems(env: NodeJS.ProcessEnv = process.env): ConfigP
   if (env.BILLING_DEV_MODE === "1") error("BILLING_DEV_MODE=1: anyone can switch a venue to paid without paying. Staging only.");
 
   if (!has("ADMIN_EMAILS")) warn("ADMIN_EMAILS is not set, so nobody can open /admin.");
-  if (!has("TURNSTILE_SECRET_KEY") || !has("NEXT_PUBLIC_TURNSTILE_SITE_KEY")) warn("Turnstile isn't set up, so sign-up and password reset have no bot check.");
+  if (!has("TURNSTILE_SECRET_KEY") || !has("NEXT_PUBLIC_TURNSTILE_SITE_KEY")) error("Turnstile isn't set up, so sign-up and password reset have no bot check: scripts can create accounts and send reset emails.");
   if (env.DISABLE_JOBS === "1" && !has("CRON_SECRET")) error("DISABLE_JOBS=1 without CRON_SECRET: weekly summaries, guest emails and clean-up never run.");
 
   const legal = missingLegalDetails();

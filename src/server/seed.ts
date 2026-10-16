@@ -112,7 +112,7 @@ export const DEMO_VENUES: PublicVenue[] = [
       featureOrder: ["loyalty", "googleReview", "menu", "wifi", "feedback"],
     },
     externalLinks: [],
-    crm: { enabled: false, consentAsk: false, wifiCapture: false, feedbackCapture: false, birthdayAsk: false },
+    crm: { enabled: false, wifiCapture: false, feedbackCapture: false, birthdayAsk: false },
   },
   {
     // Was "The Copper Kettle"; same id and code so existing links keep working.
@@ -170,7 +170,7 @@ export const DEMO_VENUES: PublicVenue[] = [
       sudokuEnabled: true,
     },
     externalLinks: [],
-    crm: { enabled: true, consentAsk: true, wifiCapture: true, feedbackCapture: true, birthdayAsk: true },
+    crm: { enabled: true, wifiCapture: true, feedbackCapture: true, birthdayAsk: true },
   },
   {
     id: "ven_bloom",
@@ -202,7 +202,7 @@ export const DEMO_VENUES: PublicVenue[] = [
       { id: "lnk_book", url: "https://example.com/bloom-bakery/cake-orders", labelCustom: "Order a celebration cake", icon: "gift" },
       { id: "lnk_jobs", url: "https://example.com/bloom-bakery/jobs", labelToken: "visit_website", icon: "jobs" },
     ],
-    crm: { enabled: true, consentAsk: true, wifiCapture: true, feedbackCapture: true, birthdayAsk: false },
+    crm: { enabled: true, wifiCapture: true, feedbackCapture: true, birthdayAsk: false },
   },
 ];
 

@@ -9,14 +9,12 @@ export const venueSettingsSchema = z.object({
   stampPolicy: z.object({
     /** Minimum minutes between stamp visits for one card; staff can override. */
     cooldownMinutes: z.number().int().min(0).max(24 * 60),
-    /** One free stamp a day for a member who leaves feedback. */
+    /** One free stamp for a member's first feedback, once per member. */
     feedbackStamp: z.boolean(),
   }),
   automations: z.object({
-    /** Service email when a stamp unlocks a reward. */
-    rewardReady: z.boolean(),
+    /** The birthday reward (what members get, in the owner's words) and its birthday-wish email. */
     birthday: z.object({ enabled: z.boolean(), offer: z.string().trim().max(200) }),
-    winBack: z.object({ enabled: z.boolean(), days: z.number().int().min(7).max(365), offer: z.string().trim().max(200) }),
   }),
 });
 
@@ -25,9 +23,7 @@ export type VenueSettings = z.output<typeof venueSettingsSchema>;
 export const DEFAULT_SETTINGS: VenueSettings = {
   stampPolicy: { cooldownMinutes: 30, feedbackStamp: true },
   automations: {
-    rewardReady: true,
-    birthday: { enabled: false, offer: "A free coffee on us this week" },
-    winBack: { enabled: false, days: 30, offer: "Come back this week for a free pastry with any drink" },
+    birthday: { enabled: false, offer: "" },
   },
 };
 
@@ -37,10 +33,7 @@ export function resolveSettings(raw: unknown): VenueSettings {
   const merged = {
     stampPolicy: { ...DEFAULT_SETTINGS.stampPolicy, ...saved.stampPolicy },
     automations: {
-      ...DEFAULT_SETTINGS.automations,
-      ...saved.automations,
       birthday: { ...DEFAULT_SETTINGS.automations.birthday, ...(saved.automations?.birthday as object | undefined) },
-      winBack: { ...DEFAULT_SETTINGS.automations.winBack, ...(saved.automations?.winBack as object | undefined) },
     },
   };
   const result = venueSettingsSchema.safeParse(merged);

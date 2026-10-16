@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { rewardsPassLine } from "@/lib/landing-copy";
 import { birthdayAskOn } from "@/lib/venue/features";
-import { BirthdayFields, EMPTY_BIRTHDAY, Field, RewardsConsent, SuccessPanel, JoinedCard, birthdayAnswer } from "../forms";
+import { BirthdayFields, EMPTY_BIRTHDAY, Field, JoinAgreement, SuccessPanel, JoinedCard, birthdayAnswer } from "../forms";
 import { useLanding, type Membership } from "../LandingContext";
 import { useRewardsJoin } from "../useJoin";
 
@@ -13,7 +13,6 @@ export function RewardsJoinedPanel({ membership }: { membership: Membership }) {
   return (
     <SuccessPanel icon="heart" title={t("rewards_joined")}>
       {line && <p>{line}</p>}
-      {membership.response.confirmationPending && <p className="confirm-notice">{t("check_inbox_confirm")}</p>}
       <JoinedCard response={membership.response} />
     </SuccessPanel>
   );
@@ -24,11 +23,11 @@ export function RewardsJoinedPanel({ membership }: { membership: Membership }) {
  * Validation happens on tap: the button is never disabled up front.
  */
 export function RewardsJoinForm({ door, withBirthday }: { door: "home" | "feedback"; withBirthday: boolean }) {
-  const { venue, t, track } = useLanding();
+  const { venue, t } = useLanding();
   const join = useRewardsJoin();
   const [firstName, setFirstName] = useState("");
   const [email, setEmail] = useState("");
-  const [ageAttested, setAgeAttested] = useState(false);
+  const [agreed, setAgreed] = useState(false);
   const [birthday, setBirthday] = useState(EMPTY_BIRTHDAY);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,10 +36,9 @@ export function RewardsJoinForm({ door, withBirthday }: { door: "home" | "feedba
   async function submit() {
     setBusy(true);
     setError(null);
-    const result = await join({ email, firstName, ageAttested, door, birthday: showBirthday ? birthdayAnswer(birthday) : null });
+    const result = await join({ email, firstName, agreed, door, birthday: showBirthday ? birthdayAnswer(birthday) : null });
     setBusy(false);
     if (!result.ok) setError(t(result.error));
-    else if (result.response.confirmationPending) track("consent_confirmation_sent", { source: "rewards" });
   }
 
   return (
@@ -65,7 +63,7 @@ export function RewardsJoinForm({ door, withBirthday }: { door: "home" | "feedba
             <BirthdayFields value={birthday} onChange={setBirthday} />
           </div>
         )}
-        <RewardsConsent checked={ageAttested} onChange={setAgeAttested} />
+        <JoinAgreement checked={agreed} onChange={setAgreed} />
         <button type="submit" className={`primary-btn${busy ? " busy" : ""}`} disabled={busy}>
           {busy ? t("enrolling") : t("feature_loyalty")}
         </button>

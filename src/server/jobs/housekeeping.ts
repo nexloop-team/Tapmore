@@ -13,6 +13,7 @@ const RULES: [table: string, where: string][] = [
   ["staff_pairings", "expires_at < now() - INTERVAL '1 day'"],
   ["staff_invites", "expires_at < now() - INTERVAL '30 days'"],
   ["admin_edit_grants", "expires_at < now()"],
+  ["rate_limits", "expires_at < now()"],
   // Email copies: long enough to answer "did my email go?", no longer.
   ["outbox", "created_at < now() - INTERVAL '90 days'"],
   // Scan analytics feed 12-month charts.

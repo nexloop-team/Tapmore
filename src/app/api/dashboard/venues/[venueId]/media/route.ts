@@ -5,7 +5,7 @@ import { saveVenueMedia } from "@/server/services/media";
 /** Multipart upload of one image (`file`); answers with its public URL. */
 export const POST = handle(async (request, ctx: RouteContext<"/api/dashboard/venues/[venueId]/media">) => {
   const { venue } = await venueFromRequest(request, (await ctx.params).venueId, { write: true });
-  rateLimit(request, "media", 30);
+  await rateLimit(request, "media", 30);
   let file: FormDataEntryValue | null = null;
   try {
     file = (await request.formData()).get("file");

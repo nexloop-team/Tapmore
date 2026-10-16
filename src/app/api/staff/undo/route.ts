@@ -5,7 +5,7 @@ import { requireStaffDevice, undoLast } from "@/server/services/staff";
 export const POST = handle(async (request) => {
   assertSameOrigin(request);
   const device = await requireStaffDevice();
-  rateLimitKey(`staff:${device.id}`, 60);
+  await rateLimitKey(`staff:${device.id}`, 60);
   const { cardId } = await parseBody(request, staffUndoRequest);
   return Response.json(await undoLast(device, cardId));
 });

@@ -315,29 +315,24 @@
 .consent-line {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
+  gap: 10px;
   min-height: 44px;
-  font-size: 14px;
+  font-size: 12.5px;
   line-height: 1.4;
   text-align: start;
   color: var(--card-text-secondary, var(--text-secondary));
   cursor: pointer;
 }
 .consent-line input[type="checkbox"] {
-  width: 22px;
-  height: 22px;
-  min-width: 22px;
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
   margin: 0;
   accent-color: var(--card-text-primary, var(--text-primary));
 }
 .consent-line a {
   color: inherit;
   text-decoration: underline;
-}
-.confirm-notice {
-  margin-top: 8px;
-  font-size: 14px;
-  color: var(--card-text-secondary, var(--text-secondary));
 }
 .birthday-block {
   display: flex;
@@ -466,14 +461,6 @@
   font-size: 14px;
   color: var(--card-text-secondary, var(--text-secondary));
   flex-shrink: 0;
-}
-.wifi-notice {
-  margin-bottom: 12px;
-  font-size: 14px;
-  color: var(--card-text-secondary, var(--text-secondary));
-}
-.wifi-notice p + p {
-  margin-top: 4px;
 }
 
 /* ───────────────────────── Feedback ───────────────────────── */
@@ -608,6 +595,69 @@
   from {
     opacity: 0;
   }
+}
+/* After feedback: a compact result under the thank-you, not a second big header. */
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--input-bg);
+  text-align: start;
+}
+.status-row-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--card-bg);
+}
+.status-row-icon svg {
+  width: 18px;
+  height: 18px;
+}
+.status-heart .status-row-icon {
+  color: var(--loyalty-rose);
+}
+.status-stamp .status-row-icon {
+  color: var(--success-green);
+}
+.status-info .status-row-icon {
+  color: var(--card-text-secondary, var(--text-secondary));
+}
+.status-row-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--card-text-secondary, var(--text-secondary));
+}
+.status-row-text strong {
+  font-size: 15px;
+  color: var(--card-text-primary, var(--text-primary));
+}
+.thanks-next {
+  align-self: stretch;
+  margin-top: 16px;
+  text-align: start;
+}
+.thanks-join {
+  padding-top: 16px;
+  border-top: 0.5px solid var(--separator);
+}
+.thanks-join > p {
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--card-text-secondary, var(--text-secondary));
+  margin: 0 0 12px;
+}
+/* Inside a sheet its own close button is there already: no second ×. */
+.bottom-sheet-panel .success-panel > .close-x {
+  display: none;
 }
 .review-prompt {
   align-self: stretch;
@@ -1231,6 +1281,17 @@
 .my-card .member-card-ready {
   margin-top: 0;
 }
+.member-card-birthday {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.member-card-birthday svg {
+  flex: none;
+  width: 18px;
+  height: 18px;
+}
 .my-card .card-staff {
   margin-top: 0;
   display: flex;
@@ -1353,14 +1414,6 @@
   .skeleton > * {
     animation: none;
   }
-}
-
-/* "Check your inbox" after a join that needs email confirmation */
-.confirm-notice {
-  padding: 10px 12px;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--success-green) 14%, transparent);
-  color: var(--card-text-primary, var(--text-primary));
 }
 
 /* ───────────────────────── Layout presets (Pro) ─────────────────────────
@@ -1959,26 +2012,6 @@ svg.tile-glyph {
   align-items: center;
   gap: 10px;
 }
-.rc-logo {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  overflow: hidden;
-  background: #ffffff;
-  color: #d94d66;
-}
-.rc-logo img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.rc-logo svg {
-  width: 18px;
-  height: 18px;
-}
 .rc-venue {
   flex: 1;
   min-width: 0;
@@ -2253,6 +2286,28 @@ svg.tile-glyph {
   margin: 6px 0 0;
   text-align: center;
   font-size: 15px;
+}
+/* The card on the venue's page: its two account links as one quiet footer line. */
+.my-card-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2px 14px;
+  margin-top: 14px;
+}
+.my-card-links .rc-different {
+  margin: 0;
+  font-size: 12px;
+}
+.my-card-links .rc-different .link-btn {
+  padding: 2px 0;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+.rc-opening {
+  margin: 48px 0;
+  text-align: center;
+  color: var(--text-secondary);
 }
 .rc-different a,
 .rc-different .link-btn {

@@ -122,7 +122,7 @@ export function MenuTile({ label }: { label: string }) {
 }
 
 /** Network name and how to get on; the copy happens in WifiTileButton when there's no email gate. */
-export function WifiTile({ label, status }: { label: string; status: string }) {
+export function WifiTile({ label, status, unlocked = false }: { label: string; status: string; unlocked?: boolean }) {
   const { venue } = useLanding();
   const wifi = wifiView(venue);
   const gated = wifiGateActive(venue);
@@ -131,7 +131,7 @@ export function WifiTile({ label, status }: { label: string; status: string }) {
       <span className="tile-row">
         <TileTitle>{label}</TileTitle>
         <span className="tile-icon-btn" aria-hidden>
-          {wifi.canCopyPassword && !gated ? <Copy /> : gated ? <Lock /> : <Wifi />}
+          {(wifi.canCopyPassword && !gated) || unlocked ? <Copy /> : gated ? <Lock /> : <Wifi />}
         </span>
       </span>
       <span className="tile-text tile-bottom">
@@ -144,10 +144,12 @@ export function WifiTile({ label, status }: { label: string; status: string }) {
   );
 }
 
-/** Wi-Fi without an email gate: one tap copies the password; no sheet needed. */
-export function useWifiCopy() {
+/** One tap copies the Wi-Fi password, no sheet: no email gate, or a guest this phone already knows. */
+export function useWifiCopy(unlockedPassword?: string | null) {
   const { venue, t, track } = useLanding();
   const wifi = wifiView(venue);
+  // Behind the email gate the page only has the password for a guest it knows (see useKnownGuestWifi).
+  const password = unlockedPassword || wifi.password;
   const [copied, setCopied] = useState<"copied" | "failed" | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
@@ -155,7 +157,7 @@ export function useWifiCopy() {
   async function copy() {
     track("wifi_copy_password");
     try {
-      await copyToClipboard(wifi.password);
+      await copyToClipboard(password);
       setCopied("copied");
     } catch {
       setCopied("failed");
@@ -165,7 +167,7 @@ export function useWifiCopy() {
   }
 
   const status = copied === "copied" ? t("tile_wifi_copied") : copied === "failed" ? t("failed") : t("tile_wifi_copy");
-  return { canCopy: wifi.canCopyPassword, copy, status };
+  return { canCopy: !!unlockedPassword || wifi.canCopyPassword, copy, status };
 }
 
 export function FeedbackTile({ label }: { label: string }) {

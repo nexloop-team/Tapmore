@@ -34,7 +34,6 @@ function toVenue(row: VenueRow): PublicVenue {
     branding: config.branding ?? {},
     crm: {
       enabled: !!config.crm?.enabled,
-      consentAsk: !!config.crm?.consentAsk,
       wifiCapture: !!config.crm?.wifiCapture,
       feedbackCapture: !!config.crm?.feedbackCapture,
       birthdayAsk: !!config.crm?.birthdayAsk,

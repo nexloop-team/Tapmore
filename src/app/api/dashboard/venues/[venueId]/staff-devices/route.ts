@@ -7,7 +7,7 @@ import { createPairing } from "@/server/services/staff";
 /** Starts pairing a till device: a one-time link (and its QR) valid for 15 minutes. */
 export const POST = handle(async (request, ctx: RouteContext<"/api/dashboard/venues/[venueId]/staff-devices">) => {
   const { venue } = await venueFromRequest(request, (await ctx.params).venueId, { write: true });
-  rateLimit(request, "staff-pairing", 20);
+  await rateLimit(request, "staff-pairing", 20);
   const { label } = await parseBody(request, addStaffDeviceRequest);
   const { token, expiresAt } = await createPairing(venue.id, label);
   const url = `${publicOrigin(requestOrigin(request))}/api/staff/pair?t=${encodeURIComponent(token)}`;

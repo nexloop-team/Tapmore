@@ -35,7 +35,7 @@ Three demo venues are seeded on first start (free access, no owner; hidden from 
 | URL | Shows |
 |---|---|
 | `/s?i=demo` | Stamp card with reward tiers, hosted menu, plain Wi-Fi, Sudoku |
-| `/s?i=demo-crm` | Honeycomb Café: Bento tiles on White & Honey, Indian menu (₹, veg / non-veg marks), Wi-Fi email gate, marketing consent, birthday ask |
+| `/s?i=demo-crm` | Honeycomb Café: Bento tiles on White & Honey, Indian menu (₹, veg / non-veg marks), Wi-Fi email gate, birthday ask |
 | `/s?i=demo-rewards` | Rewards-only membership, external ordering link, custom link cards |
 
 ## Subscription
@@ -57,7 +57,7 @@ When a venue has neither a paid subscription nor trial days left, its guest page
       - **MinIO, R2 or AWS:** use their endpoint and keys.
    3. Without `S3_*`, images stay on the server's disk under `DATA_DIR`. That needs a persistent volume, so it won't work on serverless hosts.
    4. Check both before starting: `node --env-file=.env.local scripts/check-connections.mjs`.
-   5. Run a single instance, because rate limits are kept in memory. They read the visitor's address from the proxy's end of `X-Forwarded-For`: set `TRUSTED_PROXY_COUNT=2` with Cloudflare in front of the host, or `CLIENT_IP_HEADER` to a header your CDN sets.
+   5. Rate limits are counted in the database (the `rate_limits` table), so they hold across any number of instances, Vercel included. They read the visitor's address from the proxy's end of `X-Forwarded-For`: set `TRUSTED_PROXY_COUNT=2` with Cloudflare in front of the host, or `CLIENT_IP_HEADER` to a header your CDN sets.
    6. Every table has row-level security on with no policies. Supabase's automatic REST API can't read them; the app connects as the tables' owner and isn't affected.
 2. **Set `APP_URL`** to your public origin (e.g. `https://tapmore.app`). It's encoded into every QR code, so it must never change.
 3. **Email:** create a [Resend](https://resend.com) account, verify your sending domain, then set `RESEND_API_KEY` and `MAIL_FROM`.
@@ -108,7 +108,7 @@ When a venue has neither a paid subscription nor trial days left, its guest page
 | `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | Cloudflare Turnstile captcha on sign-up and password reset; off without them |
 | `TRUSTED_PROXY_COUNT`, `CLIENT_IP_HEADER` | Where rate limits read the visitor's address (default: the last `X-Forwarded-For` entry) |
 | `CRON_SECRET` | Enables `POST /api/cron/run` for an external scheduler (`Authorization: Bearer …`) |
-| `DISABLE_JOBS` | `1` stops the in-process hourly job ticker (weekly digest, guest emails, daily clean-up), e.g. when running more than one server. On Vercel it's always off: `vercel.json` runs the jobs daily at 09:00 UTC through Vercel Cron, which needs `CRON_SECRET` set |
+| `DISABLE_JOBS` | `1` stops the in-process hourly job ticker (birthday emails, daily clean-up), e.g. when running more than one server. On Vercel it's always off: `vercel.json` runs the jobs daily at 09:00 UTC through Vercel Cron, which needs `CRON_SECRET` set |
 | `NEXT_PUBLIC_BRAND_NAME` | Product name in the footer and titles (default "Tapmore") |
 | `GOOGLE_NL_API_KEY` | Optional: Google Cloud Natural Language for sentiment (a built-in lexicon is used otherwise) |
 
@@ -138,7 +138,7 @@ When a venue has neither a paid subscription nor trial days left, its guest page
 | `/s?i=<code>&s=<source>` | Landing page (server-rendered, venue theme applied before first paint). `cta=box\|anon` forces the feedback-card A/B variant. |
 | `/menu?i=<code>` | Hosted menu: search, section jump bar, allergen filter, dietary tags |
 | `/card/<id>?t=<token>` | Member's web card (linked from the enrolment email), where they can also delete their card and details |
-| `/consent?token=` | The double-opt-in link: a Confirm button (email scanners open links, so confirming takes a tap) |
+| `/consent?token=` | Old offers-confirmation links (offers consent is no longer asked; joining is agreeing to the membership) |
 | `/privacy`, `/terms`, `/refunds`, `/shipping`, `/contact` | Privacy policy (DPDP), terms, cancellation and refunds, delivery policy, contact |
 | `/unsubscribe?token=` | Stop offer emails from one venue (also one-click from mail apps) |
 | `/media/<venue>/<file>` | Images uploaded by owners |

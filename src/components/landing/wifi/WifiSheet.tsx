@@ -1,87 +1,56 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { api } from "@/lib/api/client";
-import { deviceMemory } from "@/lib/browser";
-import { birthdayAskOn, wifiGateActive } from "@/lib/venue/features";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { api, ApiRequestError } from "@/lib/api/client";
+import { deviceMemory, parseCardCredentials, subscribeStorage } from "@/lib/browser";
+import { wifiGateActive } from "@/lib/venue/features";
 import { useSheet } from "../FeatureCard";
-import { BirthdayFields, birthdayAnswer } from "../forms";
 import { useLanding } from "../LandingContext";
 import { WifiCredentials } from "./WifiCredentials";
 import { WifiGate, type GateCompletion } from "./WifiGate";
 
-/** Asked after the guest is online, never before, and only of someone who said yes to marketing. */
-function BirthdayPrompt({ customerId, onDone }: { customerId: string; onDone: () => void }) {
-  const { venue, t, tf, track } = useLanding();
-  const [value, setValue] = useState({ month: "1", day: "1" });
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    track("birthday_prompt_shown", { source: "wifi" });
-  }, [track]);
-
-  function skip() {
-    const state = deviceMemory.birthdayState(venue.id);
-    deviceMemory.setBirthdayState(venue.id, state === "1" ? "2" : "1");
-    void api.setBirthday({ venueId: venue.id, customerId, skipped: true }).catch(() => {});
-    track("birthday_prompt_skipped");
-    onDone();
-  }
-
-  async function save() {
-    const answer = birthdayAnswer(value);
-    if (!answer) return;
-    setBusy(true);
-    try {
-      await api.setBirthday({ venueId: venue.id, customerId, ...answer });
-      deviceMemory.setBirthdayState(venue.id, "answered");
-      track("birthday_added", { source: "wifi" });
-      onDone();
-    } catch {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <div className="form-stack birthday-card" style={{ marginTop: 16 }}>
-      <h3>{t("birthday_prompt_title")}</h3>
-      <p className="sub-text">{tf("birthday_prompt_body", { business: venue.name })}</p>
-      <BirthdayFields value={value} onChange={setValue} allowBlank={false} />
-      <button type="button" className={`primary-btn${busy ? " busy" : ""}`} disabled={busy} onClick={save}>
-        {t("birthday_save")}
-      </button>
-      <button type="button" className="sheet-btn" onClick={skip}>
-        {t("birthday_skip")}
-      </button>
-    </div>
-  );
-}
 export function WifiSheet() {
-  const { venue, t, track, knownCustomerId } = useLanding();
+  const { venue, track, knownCustomerId } = useLanding();
   const { isOpen } = useSheet();
   const gated = wifiGateActive(venue);
   const [completion, setCompletion] = useState<GateCompletion | null>(null);
-  const [birthdayFor, setBirthdayFor] = useState<string | null>(null);
   const visitRecorded = useRef(false);
   const wasOpen = useRef(false);
 
-  // A device the venue already knows skips the gate (and so does a guest who joined elsewhere on the page).
-  const gateVisible = gated && !knownCustomerId && !completion;
-  const guestId = completion?.customerId ?? knownCustomerId;
+  // A loyalty member whose card is on this phone is already known: no email asked.
+  const storedCardRaw = useSyncExternalStore(subscribeStorage, () => deviceMemory.cardRaw(venue.id), () => null);
+  const [refusedCardId, setRefusedCardId] = useState<string | null>(null);
+  const card = useMemo(() => {
+    const stored = parseCardCredentials(storedCardRaw);
+    return stored && stored.cardId !== refusedCardId ? stored : null;
+  }, [storedCardRaw, refusedCardId]);
 
-  // Behind the gate the password is fetched once the guest is through it.
+  // Who this phone is: the id from the gate (or a join elsewhere on the page), else the card it holds.
+  const customerId = completion?.customerId ?? knownCustomerId;
+  const guest = useMemo(
+    () => (customerId ? { key: customerId, proof: { customerId } } : card ? { key: card.cardId, proof: { card } } : null),
+    [customerId, card],
+  );
+  const gateVisible = gated && !guest;
+
+  // Behind the gate the password is fetched once the guest is known.
   const [password, setPassword] = useState<{ for: string; value: string | null } | null>(null);
   useEffect(() => {
-    if (!gated || !isOpen || !guestId || password?.for === guestId) return;
+    if (!gated || !isOpen || !guest || password?.for === guest.key) return;
     let cancelled = false;
     api
-      .wifiPassword({ venueId: venue.id, customerId: guestId })
-      .then((result) => !cancelled && setPassword({ for: guestId, value: result.password }))
-      .catch(() => !cancelled && setPassword({ for: guestId, value: null }));
+      .wifiPassword({ venueId: venue.id, ...guest.proof })
+      .then((result) => !cancelled && setPassword({ for: guest.key, value: result.password }))
+      .catch((error) => {
+        if (cancelled) return;
+        // A card the venue no longer has (deleted, or reset): ask for the email after all.
+        if ("card" in guest.proof && error instanceof ApiRequestError && error.status === 404) setRefusedCardId(guest.key);
+        else setPassword({ for: guest.key, value: null });
+      });
     return () => {
       cancelled = true;
     };
-  }, [gated, isOpen, guestId, password, venue.id]);
+  }, [gated, isOpen, guest, password, venue.id]);
 
   // Open/close is what's measured: a tap, not a page load.
   useEffect(() => {
@@ -96,21 +65,18 @@ export function WifiSheet() {
       track("wifi_gate_shown");
       return;
     }
-    // A guest this phone knows counts as a visit (it keeps "we miss you" emails honest).
-    if (knownCustomerId && !completion && !visitRecorded.current) {
+    // A guest this phone knows counts as a visit, for the owner's guest list.
+    if (guest && !completion && !visitRecorded.current) {
       visitRecorded.current = true;
       track("wifi_known_device_connected");
-      void api.recordVisit({ venueId: venue.id, customerId: knownCustomerId, type: "wifi_tap" }).catch(() => {});
+      void api.recordVisit({ venueId: venue.id, ...guest.proof, type: "wifi_tap" }).catch(() => {});
     }
-  }, [isOpen, gateVisible, knownCustomerId, completion, venue.id, track]);
+  }, [isOpen, gateVisible, guest, completion, venue.id, track]);
 
   function complete(result: GateCompletion) {
     visitRecorded.current = true; // the capture itself recorded this visit
     setCompletion(result);
-    track("wifi_gate_completed", { consent_pending: result.confirmationPending });
-    if (result.confirmationPending) track("consent_confirmation_sent", { source: "wifi" });
-    const state = deviceMemory.birthdayState(venue.id);
-    if (birthdayAskOn(venue) && result.consentAsked && state !== "answered" && state !== "2") setBirthdayFor(result.customerId);
+    track("wifi_gate_completed");
   }
 
   return (
@@ -119,13 +85,7 @@ export function WifiSheet() {
         <WifiGate onComplete={complete} />
       ) : (
         <>
-          {completion?.confirmationPending && (
-            <div className="wifi-notice" role="status">
-              <p>{t("check_inbox_confirm")}</p>
-            </div>
-          )}
-          <WifiCredentials gated={gated} password={gated ? (password?.for === guestId ? password.value : undefined) : undefined} />
-          {birthdayFor && <BirthdayPrompt customerId={birthdayFor} onDone={() => setBirthdayFor(null)} />}
+          <WifiCredentials gated={gated} password={gated && password && password.for === guest?.key ? password.value : undefined} />
         </>
       )}
     </div>

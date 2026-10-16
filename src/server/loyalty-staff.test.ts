@@ -2,7 +2,6 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { digestWeek, localDate } from "./jobs/time";
 
 // db.ts reads DATA_DIR on load, so point it at a scratch directory first.
 const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "tapmore-staff-"));
@@ -17,7 +16,6 @@ type M = {
   cards: typeof import("./repositories/loyalty-cards");
   customers: typeof import("./repositories/customers");
   venues: typeof import("./repositories/venues");
-  digest: typeof import("./jobs/digest");
   insights: typeof import("./repositories/insights");
 };
 let m: M;
@@ -32,7 +30,6 @@ beforeAll(async () => {
     cards: await import("./repositories/loyalty-cards"),
     customers: await import("./repositories/customers"),
     venues: await import("./repositories/venues"),
-    digest: await import("./jobs/digest"),
     insights: await import("./repositories/insights"),
   };
 });
@@ -129,38 +126,5 @@ describe("staff stamping", () => {
     const stats = await m.insights.venueStats(venue.id, 7);
     expect(stats.stampsGiven).toBe(3);
     expect(stats.rewardsRedeemed).toBe(1);
-  });
-});
-
-describe("weekly digest", () => {
-  it("is due from 08:00 on Monday in the venue's time zone and keyed by that Monday", async () => {
-    // 2026-10-05 is a Monday. India is UTC+5:30 (the default); London is on BST (UTC+1).
-    expect(digestWeek(new Date("2026-10-05T02:00:00Z"))).toBeNull();
-    expect(digestWeek(new Date("2026-10-05T02:35:00Z"))).toBe("2026-10-05");
-    expect(digestWeek(new Date("2026-10-10T22:00:00Z"))).toBe("2026-10-05");
-    // Sunday evening (IST) still belongs to the previous week…
-    expect(digestWeek(new Date("2026-10-04T14:00:00Z"))).toBe("2026-09-28");
-    // …and 19:00 UTC on Sunday is already 00:30 Monday in India: not due yet.
-    expect(localDate(new Date("2026-10-04T19:00:00Z"))).toBe("2026-10-05");
-    expect(digestWeek(new Date("2026-10-04T19:00:00Z"))).toBeNull();
-    // A UK venue's week turns over on London time.
-    expect(digestWeek(new Date("2026-10-05T06:30:00Z"), "Europe/London")).toBeNull();
-    expect(digestWeek(new Date("2026-10-05T07:05:00Z"), "Europe/London")).toBe("2026-10-05");
-  });
-
-  it("sends once per owner, venue and week, and only to verified owners", async () => {
-    const { venue } = await setup();
-    const db = await m.db.getDb();
-    // Old enough to qualify, owner verified.
-    (await db.run("UPDATE venues SET created_at = now() + INTERVAL '-10 days' WHERE id = ?", venue.id));
-    (await db.run("UPDATE users SET email_verified_at = now() WHERE id IN (SELECT user_id FROM venue_members WHERE venue_id = ?)", venue.id));
-    const monday = new Date("2026-10-05T09:00:00Z");
-    const outbox = async () => ((await db.get("SELECT COUNT(*) AS n FROM outbox WHERE subject LIKE ?", `%${venue.config.name}%`)) as { n: number }).n;
-    await m.digest.runWeeklyDigest(monday);
-    expect(await outbox()).toBe(1);
-    await m.digest.runWeeklyDigest(monday);
-    expect(await outbox()).toBe(1);
-    await m.digest.runWeeklyDigest(new Date("2026-10-12T09:00:00Z"));
-    expect(await outbox()).toBe(2);
   });
 });

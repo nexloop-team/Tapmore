@@ -1,5 +1,6 @@
 "use client";
 
+import { Info, Stamp } from "lucide-react";
 import { useEffect, useId, useMemo, type ReactNode } from "react";
 import type { EnrollResponse } from "@/lib/api/contracts";
 import { cardCredentialsFromUrl } from "@/lib/browser";
@@ -19,7 +20,7 @@ export function Field({ label, children }: { label: string; children: ReactNode 
   );
 }
 
-function PrivacyLink() {
+export function PrivacyLink() {
   const { t } = useLanding();
   return (
     <a href="/privacy" target="_blank" rel="noopener">
@@ -29,36 +30,22 @@ function PrivacyLink() {
 }
 
 /** The single, unticked, never-required consent box. Its sentence carries the 13+/18+ age line. */
-export function ConsentLine({ checked, onChange, withPrivacyLink = true }: { checked: boolean; onChange: (value: boolean) => void; withPrivacyLink?: boolean }) {
+/**
+ * The one box every guest join needs: agreeing to join the membership and get
+ * its emails (card, rewards, birthday wishes), confirming the age line, with
+ * the privacy notice to hand.
+ */
+export function JoinAgreement({ checked, onChange }: { checked: boolean; onChange: (value: boolean) => void }) {
   const { venue, tf } = useLanding();
   const id = useId();
-  const key = consentAgeThreshold(venue) === 18 ? "consent_single_18" : "consent_single_13";
+  const key = consentAgeThreshold(venue) === 18 ? "join_agree_18" : "join_agree_13";
   return (
     <label className="consent-line" htmlFor={id}>
-      <input id={id} type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      <input id={id} type="checkbox" required checked={checked} onChange={(e) => onChange(e.target.checked)} />
       <span>
-        {tf(key, { business: venue.name })}
-        {withPrivacyLink && (
-          <>
-            {" "}
-            <PrivacyLink />
-          </>
-        )}
+        {tf(key, { business: venue.name })} <PrivacyLink />
       </span>
     </label>
-  );
-}
-
-/** Rewards-only joins: the button is the consent, so the statement has no box; the box is the age/marketing line. */
-export function RewardsConsent({ checked, onChange }: { checked: boolean; onChange: (value: boolean) => void }) {
-  const { venue, tf } = useLanding();
-  return (
-    <>
-      <p className="sub-text">
-        {tf("rewards_consent", { business: venue.name })} <PrivacyLink />
-      </p>
-      <ConsentLine checked={checked} onChange={onChange} withPrivacyLink={false} />
-    </>
   );
 }
 
@@ -117,6 +104,24 @@ export function BirthdayFields({ value, onChange, allowBlank = true }: { value: 
 export function JoinedCard({ response }: { response: EnrollResponse }) {
   const cardCredentials = useMemo(() => cardCredentialsFromUrl(response.cardUrl), [response.cardUrl]);
   return cardCredentials ? <MyCardToggle credentials={cardCredentials} /> : null;
+}
+
+/**
+ * A compact result under a thank-you (joined, stamp added, already used):
+ * an icon, a short title and one line of detail. Not a second big header.
+ */
+export function StatusRow({ icon, title, children }: { icon: "heart" | "stamp" | "info"; title: string; children?: ReactNode }) {
+  return (
+    <div className={`status-row status-${icon}`} role="status">
+      <span className="status-row-icon" aria-hidden>
+        {icon === "heart" ? <FilledHeart /> : icon === "stamp" ? <Stamp /> : <Info />}
+      </span>
+      <span className="status-row-text">
+        <strong>{title}</strong>
+        {children && <span>{children}</span>}
+      </span>
+    </div>
+  );
 }
 
 export function SuccessPanel({

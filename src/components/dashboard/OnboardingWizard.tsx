@@ -197,7 +197,7 @@ export function OnboardingWizard({ defaultCurrency, exitHref, notice }: { defaul
                     </button>
                   ))}
                 </div>
-                {(venueType === "pub" || venueType === "bar") && <p className="hint">Guests will confirm they&apos;re 18+ before opting into marketing.</p>}
+                {(venueType === "pub" || venueType === "bar") && <p className="hint">Guests will confirm they&apos;re 18+ when they join your card.</p>}
               </div>
               <Field label="Currency for menu prices" htmlFor="currency">
                 <select id="currency" className="select" value={currencyCode} onChange={(event) => setCurrency(event.target.value as typeof currencyCode)}>

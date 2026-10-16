@@ -4,12 +4,15 @@ import type { FeedbackResponse } from "@/lib/api/contracts";
 import { useEffect, useState } from "react";
 import { hasLoyaltyProgram, isRewardsOnly } from "@/lib/venue/features";
 import { useSheet } from "../FeatureCard";
-import { SuccessPanel } from "../forms";
+import { StatusRow, SuccessPanel } from "../forms";
 import { useLanding } from "../LandingContext";
-import { RewardsJoinForm, RewardsJoinedPanel } from "../loyalty/RewardsJoinForm";
+import { RewardsJoinForm } from "../loyalty/RewardsJoinForm";
+import { rewardsPassLine } from "@/lib/landing-copy";
 import { SocialLinks, hasSocialLinks } from "../SocialLinks";
 import { useGoogleReview } from "../useGoogleReview";
 import { FreeStampJoin } from "./FreeStampJoin";
+import { MemberFeedbackStamp } from "./MemberFeedbackStamp";
+import { deviceMemory, parseCardCredentials } from "@/lib/browser";
 
 /** Positive enough for the "so glad you enjoyed it" wording on the socials branch. */
 const POSITIVE_THRESHOLD = 0.5;
@@ -24,14 +27,15 @@ function GoogleReviewButton({ feedbackText, context }: { feedbackText: string; c
   );
 }
 
-/** The softer, secondary review ask shown beneath a loyalty prompt. */
+/** The review ask beneath a loyalty result: the same layout as the plain Google thank-you (text, button, socials). */
 function ReviewNudge({ feedbackText, context }: { feedbackText: string; context: string }) {
   const { t } = useLanding();
   return (
-    <div className="review-prompt">
-      <p>{t("tap_to_review")}</p>
+    <>
+      <p style={{ marginTop: 16 }}>{t("tap_to_review")}</p>
       <GoogleReviewButton feedbackText={feedbackText} context={context} />
-    </div>
+      <SocialLinks context="thankyou" />
+    </>
   );
 }
 
@@ -46,7 +50,7 @@ function ReviewNudge({ feedbackText, context }: { feedbackText: string; context:
  * Every guest who leaves feedback is offered the Google review, whatever
  * they wrote: Google's policy forbids selectively asking happy customers
  * ("review gating"), and venues caught doing it can lose their reviews.
- * Sentiment only reaches the owner's dashboard and weekly digest.
+ * Sentiment only reaches the owner's dashboard.
  */
 export function FeedbackThankYou({ text, score, receipt }: { text: string; score: number; receipt: FeedbackResponse["stampReceipt"] }) {
   const { venue, t, tf, track, loyaltyDone, membership } = useLanding();
@@ -56,9 +60,14 @@ export function FeedbackThankYou({ text, score, receipt }: { text: string; score
   const positive = score > POSITIVE_THRESHOLD;
   const showGoogle = !!review.url;
   // Decided once, when the thank-you appears: joining below must not swap the branch out from under the guest.
+  // A member whose card is on this phone isn't asked to join: their stamp is claimed with the card.
+  const [memberCard] = useState(() => parseCardCredentials(deviceMemory.cardRaw(venue.id)));
   const [branch] = useState(() => {
-    // The free-stamp ask only when this feedback earned one (the owner can switch it off).
-    if (hasLoyaltyProgram(venue) && !loyaltyDone && receipt) return "loyalty";
+    // The free stamp only when this feedback earned one (the owner can switch it off).
+    // A card on this phone claims it straight away, even if they joined a minute ago:
+    // a member's first feedback earns one (the server allows one per member, ever).
+    if (hasLoyaltyProgram(venue) && receipt && memberCard) return "member";
+    if (hasLoyaltyProgram(venue) && receipt && !loyaltyDone) return "loyalty";
     if (isRewardsOnly(venue) && venue.crm.feedbackCapture && !membership) return "rewards";
     if (showGoogle) return "google";
     if (positive && hasSocialLinks(venue.socialLinks)) return "social";
@@ -77,28 +86,38 @@ export function FeedbackThankYou({ text, score, receipt }: { text: string; score
       <SuccessPanel icon="check" title={t("thank_you")} onClose={close}>
         <p>{t("feedback_sent")}</p>
 
-        {branch === "loyalty" && (
+        {branch === "member" && memberCard && (
           <>
-            <div className="review-prompt">
-              <FreeStampJoin receipt={receipt!} />
+            <div className="thanks-next">
+              <MemberFeedbackStamp receipt={receipt!} card={memberCard} />
             </div>
             {showGoogle && <ReviewNudge feedbackText={text} context="loyalty" />}
           </>
+        )}
+
+        {/* A join form is the one next step; the Google review ask follows once they've joined. */}
+        {branch === "loyalty" && (
+          <div className="thanks-next">
+            <FreeStampJoin receipt={receipt!} after={showGoogle ? <ReviewNudge feedbackText={text} context="loyalty" /> : null} />
+          </div>
         )}
 
         {branch === "rewards" && (
           <>
             <div className="review-prompt">
               {membership ? (
-                <RewardsJoinedPanel membership={membership} />
+                <StatusRow icon="heart" title={t("youre_enrolled")}>
+                  {rewardsPassLine(membership.response, membership.email, false, tf)}
+                </StatusRow>
               ) : (
                 <>
                   <p>{tf("rewards_thankyou_prompt", { business: venue.name })}</p>
-                  <RewardsJoinForm door="feedback" withBirthday={false} />
+                  <RewardsJoinForm door="feedback" withBirthday />
                 </>
               )}
             </div>
-            {showGoogle && <ReviewNudge feedbackText={text} context="thankyou" />}
+            {/* Joined: now the Google review ask. */}
+            {membership && showGoogle && <ReviewNudge feedbackText={text} context="thankyou" />}
           </>
         )}
 

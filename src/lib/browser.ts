@@ -19,6 +19,16 @@ export function getPlatform(): PlatformKey {
  */
 export const subscribeNever = () => () => {};
 
+/**
+ * For useSyncExternalStore reads of localStorage that another tab may change:
+ * opening the card link from an email saves the card there, and the guest
+ * page already open in another tab picks it up at once.
+ */
+export function subscribeStorage(onChange: () => void) {
+  window.addEventListener("storage", onChange);
+  return () => window.removeEventListener("storage", onChange);
+}
+
 export async function copyToClipboard(value: string): Promise<void> {
   if (navigator.clipboard?.writeText) {
     await navigator.clipboard.writeText(value);
@@ -34,6 +44,17 @@ export async function copyToClipboard(value: string): Promise<void> {
   const ok = document.execCommand("copy");
   document.body.removeChild(temp);
   if (!ok) throw new Error("Copy failed");
+}
+
+/** Whether this browser keeps what the page stores (private modes and blocked storage don't). */
+export function storageWorks(): boolean {
+  try {
+    window.localStorage.setItem("tt.probe", "1");
+    window.localStorage.removeItem("tt.probe");
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** localStorage that never throws: private windows and blocked storage just forget. */
@@ -93,9 +114,6 @@ export const deviceMemory = {
   cardRaw: (venueId: string) => safeStorage.get(`tt.card.${venueId}`),
   rememberCard: (venueId: string, card: CardCredentials) => safeStorage.set(`tt.card.${venueId}`, JSON.stringify(card)),
   forgetCard: (venueId: string) => safeStorage.set(`tt.card.${venueId}`, "null"),
-  /** "1" / "2" = skipped once / twice, "answered" = saved. */
-  birthdayState: (venueId: string) => safeStorage.get(`tt.bday.${venueId}`) ?? "",
-  setBirthdayState: (venueId: string, state: string) => safeStorage.set(`tt.bday.${venueId}`, state),
 };
 
 /**

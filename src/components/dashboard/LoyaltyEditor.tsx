@@ -4,7 +4,9 @@ import { Ban, Crown, Plus, Stamp, Trash2, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { useLivePreview } from "@/lib/live-preview";
 import type { VenueConfig } from "@/lib/venue/schema";
-import { AutomationsForm, type Automations } from "./AutomationsForm";
+import type { VenueSettings } from "@/lib/venue/settings";
+import { BirthdayRewardForm } from "./BirthdayRewardForm";
+import { FeedbackStampSetting } from "./FeedbackStampSetting";
 import { EditorPanel, EditorTabs, PreviewPane, useEditorTab, type EditorTab } from "./EditorFrame";
 import { MobilePreview } from "./MobilePreview";
 import { Card, Field, SaveBar, SwitchRow, TextField } from "./ui";
@@ -43,19 +45,20 @@ const DEFAULT_REFERRAL = { enabled: false, referrerStamps: 2, friendStamps: 1 };
 export function LoyaltyEditor({
   venueId,
   initial,
-  venueType,
   referralStats,
   previewUrl,
   automations,
+  feedbackStamp,
   till,
 }: {
   venueId: string;
   initial: Draft;
-  venueType: string | null | undefined;
   referralStats?: { joined: number; visited: number };
   /** The guest page in preview mode, which shows this editor's draft. */
   previewUrl: string;
-  automations: Automations;
+  automations: VenueSettings["automations"];
+  /** Whether a member's first feedback earns a stamp (stamp cards only). */
+  feedbackStamp: boolean;
   /** Staff devices and logins, rendered by the page. */
   till: ReactNode;
 }) {
@@ -67,7 +70,6 @@ export function LoyaltyEditor({
   const main = { rewardName: program?.rewardName ?? "", stampsRequired: program?.stampsRequired || 9 };
   const crm = draft.crm;
   const setCrm = (patch: Partial<Draft["crm"]>) => update("crm", { ...crm, ...patch });
-  const adultsOnly = venueType === "pub" || venueType === "bar";
 
   function setMode(next: Mode) {
     if (next === "off") update("loyaltyProgram", null);
@@ -83,9 +85,8 @@ export function LoyaltyEditor({
   const tabs: EditorTab[] = [
     { id: "programme", label: "Rewards" },
     { id: "capture", label: "Guest info" },
-    // The till only stamps or checks cards, so it has nothing to do without a programme.
-    ...(mode === "off" ? [] : [{ id: "till", label: "Till", anchors: ["staff", "devices"] }]),
-    { id: "emails", label: "Emails" },
+    // The till stamps and redeems; a members club has no stamps and no card code to scan.
+    ...(mode === "stamps" ? [{ id: "till", label: "Till", anchors: ["staff", "devices"] }] : []),
   ];
   const [tab, setTab] = useEditorTab(tabs);
   useLivePreview(draft);
@@ -210,11 +211,24 @@ export function LoyaltyEditor({
             )}
 
             {mode === "membership" && (
-              <Card title="Members club" description="Guests join a members list from your page. There's no stamp card: you reach members with offers and the automatic emails.">
-                <button type="button" className="btn btn-sm" style={{ justifySelf: "start" }} onClick={() => setTab("emails")}>
-                  Set up member emails
-                </button>
+              <Card title="Members club">
+                <p className="hint">
+                  Guests join a members list from your page. There&apos;s no stamp card: members get your birthday reward, and you can export the list from
+                  Guests to send your own offers to those who agreed.
+                </p>
               </Card>
+            )}
+
+            {mode === "stamps" && <FeedbackStampSetting venueId={venueId} initial={feedbackStamp} />}
+
+            {mode !== "off" && (
+              <BirthdayRewardForm
+                venueId={venueId}
+                initial={automations.birthday}
+                collectsBirthdays={crm.enabled && crm.birthdayAsk}
+                stampCard={mode === "stamps"}
+                onAskBirthdays={() => setTab("capture")}
+              />
             )}
 
           </EditorPanel>
@@ -224,13 +238,6 @@ export function LoyaltyEditor({
           <EditorPanel id="capture">
             <Card title="Guest details" description="Build a list of guests you can reach again, with their permission.">
               <SwitchRow title="Collect guest details" description="The main switch for everything below." checked={crm.enabled} onChange={(on) => setCrm({ enabled: on })} />
-              <SwitchRow
-                title="Ask for marketing consent"
-                description={`Join forms get an opt-in for offers by email, confirmed by a link (double opt-in). Guests confirm they're ${adultsOnly ? "18" : "13"}+.`}
-                checked={crm.consentAsk}
-                disabled={!crm.enabled}
-                onChange={(on) => setCrm({ consentAsk: on })}
-              />
               <SwitchRow
                 title="Email for Wi-Fi"
                 description="Guests type their email to see the Wi-Fi password, and appear in your guest list. Off: everyone sees the password. No stamp is given for it."
@@ -249,7 +256,7 @@ export function LoyaltyEditor({
               )}
               <SwitchRow
                 title="Ask for birthdays"
-                description="Day and month only, never the year. Great for a birthday treat."
+                description="Optional when guests join your card. Day and month only, never the year. You can collect birthdays without giving a reward; a birthday reward (Rewards tab) needs this on."
                 checked={crm.birthdayAsk}
                 disabled={!crm.enabled}
                 onChange={(on) => setCrm({ birthdayAsk: on })}
@@ -260,17 +267,6 @@ export function LoyaltyEditor({
 
         {tab === "till" && <EditorPanel id="till">{till}</EditorPanel>}
 
-        {tab === "emails" && (
-          <EditorPanel id="emails">
-            <AutomationsForm
-              venueId={venueId}
-              initial={automations}
-              rewardEmails={mode === "stamps"}
-              collectsConsent={crm.enabled && crm.consentAsk}
-              collectsBirthdays={crm.enabled && crm.birthdayAsk}
-            />
-          </EditorPanel>
-        )}
       </div>
 
       {mode !== "off" && <PreviewPane src={`${previewUrl}&embed=1`} version={editor.version} title="Live page preview" fullHref={previewUrl} />}

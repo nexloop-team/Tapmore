@@ -50,11 +50,11 @@ export const PLAN_FEATURES = [
   "Digital stamp cards, stamped at the till",
   "Wi-Fi card with optional email capture",
   "Private feedback box and Google review invitations",
-  "Guest list with marketing consent and CSV export",
-  "Reward, birthday and win-back emails",
+  "Guest list with CSV export",
+  "Birthday rewards, with a birthday email",
   "Refer-a-friend rewards",
   "Layouts, typography and no third-party branding",
-  "Unlimited QR codes, scan analytics and weekly summary",
+  "Unlimited QR codes and scan analytics",
 ];
 
 export interface SubscriptionState {

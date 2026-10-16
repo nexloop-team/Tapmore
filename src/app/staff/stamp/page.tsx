@@ -10,7 +10,9 @@ export const metadata: Metadata = { title: "Stamp card" };
 
 /** Opened by scanning a guest's card QR (`/staff/stamp?c=<card id>`) on a paired device. */
 export default async function StaffStampPage({ searchParams }: PageProps<"/staff/stamp">) {
-  const cardId = firstParam((await searchParams).c);
+  const params = await searchParams;
+  const cardId = firstParam(params.c);
+  const joined = firstParam(params.joined);
   const device = await currentStaffDevice();
   if (!device) {
     return (
@@ -38,5 +40,11 @@ export default async function StaffStampPage({ searchParams }: PageProps<"/staff
     );
   }
 
-  return <StaffCardPanel key={view.cardId} initial={view} />;
+  return (
+    <>
+      {joined === "new" && <div className="notice notice-ok">Member added. Their card is on its way to their email.</div>}
+      {joined === "existing" && <div className="notice notice-ok">They&apos;re already a member: here&apos;s their card. We&apos;ve emailed it to them again.</div>}
+      <StaffCardPanel key={view.cardId} initial={view} />
+    </>
+  );
 }

@@ -3,8 +3,8 @@
 import { QrCode } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
-import { deviceMemory } from "@/lib/browser";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { deviceMemory, storageWorks, subscribeNever } from "@/lib/browser";
 
 const POLL_MS = 5000;
 
@@ -113,7 +113,22 @@ export function DifferentCard({ venueId, shortCode, label }: { venueId: string; 
  * The member erases their own card and details (DPDP: withdrawing consent is
  * as easy as giving it). The card's private link is the proof it's theirs.
  */
-export function DeleteMyCard({ venueId, shortCode, cardId, token, labels }: { venueId: string; shortCode: string; cardId: string; token: string; labels: { action: string; confirm: string; done: string; failed: string } }) {
+export function DeleteMyCard({
+  venueId,
+  shortCode,
+  cardId,
+  token,
+  labels,
+  onDeleted,
+}: {
+  venueId: string;
+  shortCode: string;
+  cardId: string;
+  token: string;
+  labels: { action: string; confirm: string; done: string; failed: string };
+  /** On the venue's own page: called a moment after the confirmation shows, to put the join form back. */
+  onDeleted?: () => void;
+}) {
   const [state, setState] = useState<"idle" | "busy" | "done" | "failed">("idle");
 
   async function remove() {
@@ -124,12 +139,20 @@ export function DeleteMyCard({ venueId, shortCode, cardId, token, labels }: { ve
       if (!response.ok) throw new Error(String(response.status));
       deviceMemory.forgetCard(venueId);
       setState("done");
+      if (onDeleted) setTimeout(onDeleted, 3000);
     } catch {
       setState("failed");
     }
   }
 
   if (state === "done") {
+    if (onDeleted) {
+      return (
+        <p className="rc-different" role="status">
+          {labels.done}
+        </p>
+      );
+    }
     return (
       <p className="rc-different" role="status">
         {labels.done} <Link href={`/s?i=${encodeURIComponent(shortCode)}`}>{shortCode}</Link>
@@ -143,5 +166,49 @@ export function DeleteMyCard({ venueId, shortCode, cardId, token, labels }: { ve
       </button>
       {state === "failed" && <span role="alert"> · {labels.failed}</span>}
     </p>
+  );
+}
+
+/**
+ * The card link from an email: this phone learns the card, then the guest
+ * lands on the venue's own page, where the card now sits in place of the join
+ * form. If the browser can't keep it (storage blocked), the full card page
+ * stays on screen instead, so the guest is never left without their card.
+ */
+export function OpenOnVenuePage({
+  venueId,
+  shortCode,
+  cardId,
+  token,
+  opening,
+  children,
+}: {
+  venueId: string;
+  shortCode: string;
+  cardId: string;
+  token: string;
+  opening: string;
+  children: React.ReactNode;
+}) {
+  const router = useRouter();
+  // null while server-rendering; then whether this browser can keep the card.
+  const canKeep = useSyncExternalStore(subscribeNever, storageWorks, () => null);
+  const stay = canKeep === false;
+
+  useEffect(() => {
+    if (!canKeep) return;
+    deviceMemory.rememberCard(venueId, { cardId, token });
+    router.replace(`/s?i=${encodeURIComponent(shortCode)}`);
+  }, [canKeep, venueId, shortCode, cardId, token, router]);
+
+  return (
+    <>
+      {!stay && (
+        <p className="rc-opening" role="status">
+          {opening}
+        </p>
+      )}
+      <div hidden={!stay}>{children}</div>
+    </>
   );
 }

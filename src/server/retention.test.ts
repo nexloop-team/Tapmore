@@ -55,7 +55,7 @@ async function setup() {
   await m.admin.updateVenue(record, {
     config: {
       loyaltyProgram: { rewardName: "Free coffee", stampsRequired: 6, referral: { enabled: true, referrerStamps: 2, friendStamps: 1 } },
-      crm: { enabled: true, consentAsk: true, wifiCapture: false, feedbackCapture: false, birthdayAsk: true },
+      crm: { enabled: true, wifiCapture: false, feedbackCapture: false, birthdayAsk: true },
     },
   });
   const device = { id: `dev_r${seq}`, venueId: record.id, label: "Till" };
@@ -64,7 +64,7 @@ async function setup() {
 }
 
 async function join(venueId: string, email: string, ref?: string) {
-  return await m.loyalty.enroll(m.contracts.enrollRequest.parse({ venueId, email, firstName: "Sam", captureSource: "landing", ref }), "http://localhost:3000");
+  return await m.loyalty.enroll(m.contracts.enrollRequest.parse({ venueId, email, firstName: "Sam", captureSource: "landing", ref, agreed: true }), "http://localhost:3000");
 }
 
 const outboxCount = async (subjectLike: string) =>
@@ -147,41 +147,82 @@ describe("automatic guest emails", () => {
     expect(await outboxCount(subject)).toBe(1);
   });
 
-  it("sends birthday and win-back emails only to opted-in guests, once, in daytime", async () => {
+  it("sends the birthday wish to every card member with a birthday, once, in daytime", async () => {
     const { venueId } = await setup();
     const venue = (await m.venues.getVenueRecord(venueId))!;
     const db = await m.db.getDb();
     await m.venues.saveVenueSettings(venueId, {
       ...(await m.venues.getVenueSettings(venueId)),
-      automations: { rewardReady: true, birthday: { enabled: true, offer: "Free cake" }, winBack: { enabled: true, days: 30, offer: "Free pastry" } },
+      automations: { birthday: { enabled: true, offer: "Free cake" } },
     });
-    const optedIn = await join(venueId, "yes@example.com");
-    const notAsked = await join(venueId, "no@example.com");
-    (await db.run("UPDATE customers SET marketing_consent = 'granted', birthday_month = 10, birthday_day = 8 WHERE id = ?", optedIn.customerId));
-    (await db.run("UPDATE customers SET birthday_month = 10, birthday_day = 8 WHERE id = ?", notAsked.customerId));
-    (await db.run("UPDATE customers SET created_at = now() + INTERVAL '-60 days' WHERE id IN (?, ?)", optedIn.customerId, notAsked.customerId));
+    const first = await join(venueId, "yes@example.com");
+    const second = await join(venueId, "no@example.com");
+    (await db.run("UPDATE customers SET birthday_month = 10, birthday_day = 5 WHERE id IN (?, ?)", first.customerId, second.customerId));
 
-    // 5 Oct 2026, 10:00 London: birthdays on 8 Oct are due.
+    // 5 Oct 2026, 10:00 London: today's birthdays get their wish (it's part of the membership).
     const morning = new Date("2026-10-05T09:00:00Z");
     await m.guestEmails.runGuestAutomations(new Date("2026-10-05T05:00:00Z"));
     expect(await outboxCount(`birthday from ${venue.config.name}`)).toBe(0);
     await m.guestEmails.runGuestAutomations(morning);
     await m.guestEmails.runGuestAutomations(morning);
-    expect(await outboxCount(`birthday from ${venue.config.name}`)).toBe(1);
-    expect(await outboxCount(`We miss you at ${venue.config.name}`)).toBe(1);
+    expect(await outboxCount(`birthday from ${venue.config.name}`)).toBe(2);
 
-    const mail = (await db.get("SELECT recipient, body FROM outbox WHERE subject LIKE ?", `%birthday from ${venue.config.name}%`)) as { recipient: string; body: string };
-    expect(mail.recipient).toBe("yes@example.com");
-    expect(mail.body).toContain("Free cake");
+    const mail = (await db.get("SELECT body FROM outbox WHERE subject LIKE ? AND recipient = 'yes@example.com'", `%birthday from ${venue.config.name}%`)) as { body: string };
+    // A wish that invites them in, without giving the reward away.
+    expect(mail.body).toContain("Happy birthday from everyone at");
+    expect(mail.body).toContain("for your birthday reward");
+    expect(mail.body).not.toContain("Free cake");
     expect(mail.body).toMatch(/\/unsubscribe\?token=/);
   });
 
-  it("unsubscribing stops further marketing", async () => {
+  it("skip members who never agreed to the membership's emails (joined before the box existed)", async () => {
     const { venueId } = await setup();
-    const guest = await join(venueId, "bye@example.com");
-    const token = await m.retention.ensureUnsubscribeToken(guest.customerId);
-    const found = (await m.retention.findByUnsubscribeToken(token))!;
-    await m.retention.unsubscribe(found.customerId);
-    expect((await m.retention.findByUnsubscribeToken(token))?.consent).toBe("declined");
+    await m.venues.saveVenueSettings(venueId, {
+      ...(await m.venues.getVenueSettings(venueId)),
+      automations: { birthday: { enabled: true, offer: "Free cake" } },
+    });
+    const legacy = await m.loyalty.enroll({ venueId, email: `legacy${seq}@example.com`, firstName: "Old" }, "http://localhost:3000");
+    const db = await m.db.getDb();
+    await db.run("UPDATE customers SET birthday_month = 10, birthday_day = 5 WHERE id = ?", legacy.customerId);
+    await m.guestEmails.runGuestAutomations(new Date("2026-10-05T09:00:00Z"));
+    expect((await db.get<{ n: number }>("SELECT COUNT(*) AS n FROM outbox WHERE recipient = ? AND subject LIKE '%birthday%'", `legacy${seq}@example.com`))!.n).toBe(0);
   });
+
+  it("go only to card members", async () => {
+    const customers = await import("./repositories/customers");
+    const { venueId } = await setup();
+    const db = await m.db.getDb();
+    await m.venues.saveVenueSettings(venueId, {
+      ...(await m.venues.getVenueSettings(venueId)),
+      automations: { birthday: { enabled: true, offer: "Free cake" } },
+    });
+    const member = await join(venueId, `member${seq}@example.com`);
+    // Gave an email for the Wi-Fi only: no card.
+    const { customer: wifiOnly } = await customers.upsertCustomer(db, { venueId, email: `wifi-only${seq}@example.com`, captureSource: "wifi" });
+    await db.run("UPDATE customers SET birthday_month = 10, birthday_day = 5 WHERE id IN (?, ?)", member.customerId, wifiOnly.id);
+
+    await m.guestEmails.runGuestAutomations(new Date("2026-10-05T09:00:00Z"));
+    const name = (await m.venues.getVenueRecord(venueId))!.config.name;
+    const sentTo = ((await db.all("SELECT recipient FROM outbox WHERE subject LIKE ?", `%birthday from ${name}%`)) as { recipient: string }[]).map((row) => row.recipient);
+    expect(sentTo).toEqual([`member${seq}@example.com`]);
+  });
+
+  it("unsubscribing stops the birthday emails, and the card keeps working", async () => {
+    const { venueId } = await setup();
+    await m.venues.saveVenueSettings(venueId, {
+      ...(await m.venues.getVenueSettings(venueId)),
+      automations: { birthday: { enabled: true, offer: "Free cake" } },
+    });
+    const guest = await join(venueId, `bye${seq}@example.com`);
+    const db = await m.db.getDb();
+    await db.run("UPDATE customers SET birthday_month = 10, birthday_day = 5 WHERE id = ?", guest.customerId);
+    const token = await m.retention.ensureUnsubscribeToken(guest.customerId!);
+    const found = (await m.retention.findByUnsubscribeToken(token))!;
+    expect(found.unsubscribed).toBe(false);
+    await m.retention.unsubscribe(found.customerId);
+    expect((await m.retention.findByUnsubscribeToken(token))?.unsubscribed).toBe(true);
+    await m.guestEmails.runGuestAutomations(new Date("2026-10-05T09:00:00Z"));
+    expect((await db.get<{ n: number }>("SELECT COUNT(*) AS n FROM outbox WHERE recipient = ? AND subject LIKE '%birthday%'", `bye${seq}@example.com`))!.n).toBe(0);
+    expect(await m.cards.findCardById(db, guest.cardId)).not.toBeNull();
+});
 });

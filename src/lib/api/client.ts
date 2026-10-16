@@ -1,5 +1,4 @@
 import type {
-  BirthdayRequest,
   CaptureGuestRequest,
   CaptureGuestResponse,
   EnrollRequest,
@@ -58,5 +57,4 @@ export const api = {
   captureGuest: (body: CaptureGuestRequest) => post<CaptureGuestResponse>("/api/guests/capture", body, 15_000),
   wifiPassword: (body: WifiPasswordRequest) => post<WifiPasswordResponse>("/api/guests/wifi", body, 15_000),
   recordVisit: (body: RecordVisitRequest) => post<{ ok: true }>("/api/guests/visit", body, 10_000),
-  setBirthday: (body: BirthdayRequest) => post<{ ok: true }>("/api/guests/birthday", body, 15_000),
 };

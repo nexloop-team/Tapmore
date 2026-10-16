@@ -4,15 +4,11 @@ import { useState } from "react";
 import { api } from "@/lib/api/client";
 import { deviceMemory } from "@/lib/browser";
 import { isPlausibleEmail, normaliseEmail } from "@/lib/validation";
-import { consentAskOn } from "@/lib/venue/features";
-import { ConsentLine, Field } from "../forms";
+import { Field, PrivacyLink } from "../forms";
 import { useLanding } from "../LandingContext";
 
 export interface GateCompletion {
   customerId: string;
-  /** The guest ticked the offers line (so a birthday may be asked). */
-  consentAsked: boolean;
-  confirmationPending: boolean;
 }
 
 /**
@@ -21,13 +17,11 @@ export interface GateCompletion {
  * yes to offers never is. No card and no stamp come with it.
  */
 export function WifiGate({ onComplete }: { onComplete: (completion: GateCompletion) => void }) {
-  const { venue, t, rememberCustomer } = useLanding();
+  const { venue, t, tf, rememberCustomer } = useLanding();
   const [email, setEmail] = useState("");
   const [firstName, setFirstName] = useState("");
-  const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const askConsent = consentAskOn(venue);
 
   async function submit() {
     const address = normaliseEmail(email);
@@ -42,13 +36,11 @@ export function WifiGate({ onComplete }: { onComplete: (completion: GateCompleti
         venueId: venue.id,
         email: address,
         firstName: firstName.trim() || undefined,
-        marketingConsent: askConsent && consent,
-        ageAttested: askConsent && consent,
         locale: navigator.language,
       });
       deviceMemory.rememberCustomer(venue.id, captured.customerId);
       rememberCustomer(captured.customerId);
-      onComplete({ customerId: captured.customerId, consentAsked: askConsent && consent, confirmationPending: captured.confirmationPending });
+      onComplete({ customerId: captured.customerId });
     } catch {
       // Nothing captured, nothing shown: stay at the gate with a retry.
       setError(t("something_wrong"));
@@ -72,7 +64,9 @@ export function WifiGate({ onComplete }: { onComplete: (completion: GateCompleti
       <Field label={t("first_name")}>
         <input className="text-input" type="text" autoComplete="given-name" autoCorrect="off" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
       </Field>
-      {askConsent && <ConsentLine checked={consent} onChange={setConsent} />}
+      <p className="sheet-footnote">
+        {tf("wifi_gate_notice", { business: venue.name })} <PrivacyLink />
+      </p>
       {error && (
         <p className="form-error" role="alert">
           {error}

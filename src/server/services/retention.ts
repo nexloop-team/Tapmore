@@ -10,7 +10,6 @@ import { findCardById, setCardStamps } from "../repositories/loyalty-cards";
 import { claimGuestEmail, claimReferralReward, referralRewardsInLast, releaseGuestEmail } from "../repositories/retention";
 import { recordStampEvent } from "../repositories/stamps";
 import { venueHasAccess } from "../repositories/subscriptions";
-import { getVenueSettings } from "../repositories/venues";
 import { sendMail } from "./mailer";
 
 /** Referral rewards a member can earn in any 30 days, so invites can't be farmed. */
@@ -39,7 +38,7 @@ export async function onStaffStamp(event: { venue: PublicVenue; cardId: string; 
  * past a reward. At most once per reward per card per day.
  */
 async function sendRewardReadyEmail(venue: PublicVenue, cardId: string, before: number, after: number): Promise<boolean> {
-  if (!await venueHasAccess(venue.id) || !(await getVenueSettings(venue.id)).automations.rewardReady) return false;
+  if (!await venueHasAccess(venue.id)) return false;
   const unlocked = programTiers(venue.loyaltyProgram).filter((tier) => before < tier.stampsRequired && after >= tier.stampsRequired);
   const tier = unlocked[unlocked.length - 1];
   if (!tier) return false;

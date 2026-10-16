@@ -34,12 +34,3 @@ export function localDate(now: Date, timeZone = BUSINESS_TZ): string {
   return isoDate(p.year, p.month, p.day);
 }
 
-/**
- * The Monday (local date) of the digest week `now` falls in, or null before
- * 08:00 on Monday, when the new week's digest isn't due yet.
- */
-export function digestWeek(now: Date, timeZone = BUSINESS_TZ): string | null {
-  const p = localParts(now, timeZone);
-  if (p.weekday === 1 && p.hour < 8) return null;
-  return isoDate(p.year, p.month, p.day - (p.weekday - 1));
-}

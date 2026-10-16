@@ -1,18 +1,15 @@
 import type { Metadata } from "next";
 import { CircleCheck } from "lucide-react";
 import { PageHeader } from "@/components/dashboard/blocks";
-import { AccountForms, DigestSwitches } from "@/components/dashboard/SettingsForms";
+import { AccountForms } from "@/components/dashboard/SettingsForms";
 import { ResendVerification } from "@/components/dashboard/Shell";
 import { initials } from "@/lib/format";
 import { requireUser } from "@/server/auth/session";
-import { weeklyDigestEnabled } from "@/server/repositories/notifications";
-import { listVenuesForUser } from "@/server/repositories/venues";
 
 export const metadata: Metadata = { title: "Account" };
 
 export default async function AccountPage() {
   const user = await requireUser();
-  const venues = await Promise.all((await listVenuesForUser(user.id)).map(async (venue) => ({ id: venue.id, name: venue.config.name, enabled: await weeklyDigestEnabled(user.id, venue.id) })));
   return (
     <div className="page page-narrow">
       <PageHeader title="Account" />
@@ -31,12 +28,12 @@ export default async function AccountPage() {
           </span>
         ) : (
           <span className="account-unverified">
-            <span>Confirm your email to get the weekly summary.</span>
+            <span>Confirm your email address.</span>
             <ResendVerification />
           </span>
         )}
       </section>
-      <AccountForms name={user.name} email={user.email} notifications={<DigestSwitches venues={venues} />} />
+      <AccountForms name={user.name} email={user.email} />
     </div>
   );
 }

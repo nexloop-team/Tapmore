@@ -1,5 +1,7 @@
 import "server-only";
+import { createHash } from "node:crypto";
 import type { z } from "zod";
+import { getDb } from "./db";
 
 /** Thrown by services; routes turn it into a JSON error with this status. */
 export class ServiceError extends Error {
@@ -61,6 +63,7 @@ export function clientIp(request: Request): string {
   return hops[Math.max(0, hops.length - proxies)] || "local";
 }
 
+const TOO_MANY = "Too many requests, please try again shortly";
 const buckets = new Map<string, { hits: number[]; windowMs: number }>();
 let checks = 0;
 
@@ -71,23 +74,87 @@ function sweep(now: number) {
   }
 }
 
-/**
- * Fixed-window-ish limiter kept in process memory: enough to stop a script
- * hammering a write endpoint from one address. Behind several instances this
- * needs a shared store (Redis) instead.
- */
-export function rateLimit(request: Request, route: string, limit: number, windowMs = 60_000) {
-  rateLimitKey(`${route}:${clientIp(request)}`, limit, windowMs);
-}
-
-/** The same limiter on any key, e.g. per account email for login attempts. */
-export function rateLimitKey(key: string, limit: number, windowMs = 60_000) {
+/** This instance's own sliding-window count: free, but each serverless copy of the app has its own. */
+function countLocally(key: string, limit: number, windowMs: number) {
   const now = Date.now();
   if (++checks % 1000 === 0 || buckets.size > 50_000) sweep(now);
   const hits = (buckets.get(key)?.hits ?? []).filter((t) => now - t < windowMs);
-  if (hits.length >= limit) throw new ServiceError(429, "Too many requests, please try again shortly");
+  if (hits.length >= limit) throw new ServiceError(429, TOO_MANY);
   hits.push(now);
   buckets.set(key, { hits, windowMs });
+}
+
+/**
+ * One fixed-window counter per key in Postgres, shared by every instance
+ * (Vercel runs many, each with its own memory). Keys are hashed, so emails
+ * used as keys aren't stored. Returns the hits in the current window.
+ */
+async function countShared(key: string, windowMs: number): Promise<number> {
+  const now = Date.now();
+  const windowStart = now - (now % windowMs);
+  const row = (await (await getDb()).get(
+    `INSERT INTO rate_limits (key, window_start, hits, expires_at) VALUES (?, ?, 1, ?)
+     ON CONFLICT (key) DO UPDATE SET
+       hits = CASE WHEN rate_limits.window_start = EXCLUDED.window_start THEN rate_limits.hits + 1 ELSE 1 END,
+       window_start = EXCLUDED.window_start,
+       expires_at = EXCLUDED.expires_at
+     RETURNING hits`,
+    createHash("sha256").update(`${windowMs}:${key}`).digest("base64url"),
+    windowStart,
+    new Date(windowStart + windowMs).toISOString(),
+  )) as { hits: number };
+  return row.hits;
+}
+
+/**
+ * Limits what one address can do to a route, across every instance of the
+ * app. This instance's own count is checked first, so a script hammering one
+ * instance is turned away without touching the database.
+ */
+export async function rateLimit(request: Request, route: string, limit: number, windowMs = 60_000) {
+  await rateLimitKey(`${route}:${clientIp(request)}`, limit, windowMs);
+}
+
+/** The same limiter on any key, e.g. per account email for login attempts. */
+export async function rateLimitKey(key: string, limit: number, windowMs = 60_000) {
+  countLocally(key, limit, windowMs);
+  let hits: number;
+  try {
+    hits = await countShared(key, windowMs);
+  } catch (error) {
+    // The local count above still applies; a database hiccup shouldn't take sign-in down with it.
+    console.error("[rate-limit] shared counter unavailable", error);
+    return;
+  }
+  if (hits > limit) throw new ServiceError(429, TOO_MANY);
+}
+
+/**
+ * Counts one more use of `key` and says whether it's still within `limit`
+ * for the window, without refusing the request: for quietly skipping a side
+ * effect (an email) rather than failing the whole call. False if the counter
+ * can't be reached, so a side effect is skipped rather than sent unchecked.
+ */
+export async function underLimit(key: string, limit: number, windowMs: number): Promise<boolean> {
+  try {
+    return (await countShared(key, windowMs)) <= limit;
+  } catch (error) {
+    console.error("[rate-limit] shared counter unavailable", error);
+    return false;
+  }
+}
+
+/**
+ * This instance's count only, for high-volume endpoints where a database
+ * write per request costs more than a looser limit (analytics beacons, card
+ * polling): nothing there is worth guessing at.
+ */
+export function rateLimitLocal(request: Request, route: string, limit: number, windowMs = 60_000) {
+  countLocally(`${route}:${clientIp(request)}`, limit, windowMs);
+}
+
+export function rateLimitKeyLocal(key: string, limit: number, windowMs = 60_000) {
+  countLocally(key, limit, windowMs);
 }
 
 /**

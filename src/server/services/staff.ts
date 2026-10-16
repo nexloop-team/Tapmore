@@ -2,10 +2,10 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { cookies } from "next/headers";
 import { cache } from "react";
-import type { StaffCardView } from "@/lib/api/staff-contracts";
-import { maskEmail } from "@/lib/validation";
+import type { StaffCardView, StaffEnrollRequest, StaffEnrollResponse } from "@/lib/api/staff-contracts";
+import { isPlausibleEmail, isValidBirthday, maskEmail, normaliseEmail } from "@/lib/validation";
 import { programTiers, stampGoal } from "@/lib/venue/loyalty";
-import { hasLoyaltyProgram } from "@/lib/venue/features";
+import { birthdayAskOn, hasLoyaltyProgram } from "@/lib/venue/features";
 import type { PublicVenue } from "@/lib/venue/types";
 import { getDb, transaction } from "../db";
 import { ServiceError } from "../http";
@@ -15,6 +15,11 @@ import { lastStaffStampAt, lastUndoableEvent, markUndone, recordStampEvent } fro
 import { findVenue, getVenueSettings } from "../repositories/venues";
 import { onStaffStamp } from "./retention";
 import { parseDbDate } from "@/lib/plans";
+import { birthdayTreat } from "./birthday";
+import { enroll } from "./loyalty";
+
+type StaffEnrollInput = StaffEnrollRequest;
+import { changeBirthday } from "../repositories/customers";
 
 /**
  * Staff stamping without staff accounts: the owner pairs a till phone or
@@ -94,7 +99,11 @@ export async function revokeStaffDevice(venueId: string, deviceId: string) {
 export const currentStaffDevice = cache(async (): Promise<StaffDevice | null> => {
   const token = (await cookies()).get(STAFF_COOKIE)?.value;
   if (!token) return null;
-  const row = (await (await getDb()).get("SELECT id, venue_id, label FROM staff_devices WHERE id = ? AND revoked_at IS NULL", digest(token))) as
+  // A device opened from someone's login works only while that account does: blocking or deleting it stops the till too.
+  const row = (await (await getDb()).get(
+      `SELECT d.id, d.venue_id, d.label
+         FROM staff_devices d LEFT JOIN users u ON u.id = d.user_id
+        WHERE d.id = ? AND d.revoked_at IS NULL AND (d.user_id IS NULL OR (u.id IS NOT NULL AND u.blocked_at IS NULL))`, digest(token))) as
     | { id: string; venue_id: string; label: string }
     | undefined;
   return row ? { id: row.id, venueId: row.venue_id, label: row.label } : null;
@@ -130,10 +139,12 @@ async function touchDevice(deviceId: string) {
 export async function viewCard(device: StaffDevice, cardId: string): Promise<StaffCardView> {
   const venue = await stampVenue(device);
   const card = await requireCard(device, cardId);
-  const customer = (await (await getDb()).get("SELECT email, first_name, name FROM customers WHERE id = ?", card.customer_id)) as {
+  const customer = (await (await getDb()).get("SELECT email, first_name, name, birthday_month, birthday_day FROM customers WHERE id = ?", card.customer_id)) as {
     email: string;
     first_name: string | null;
     name: string | null;
+    birthday_month: number | null;
+    birthday_day: number | null;
   };
   const tiers = programTiers(venue.loyaltyProgram);
   const undoable = await lastUndoableEvent(await getDb(), card.id, UNDO_MINUTES);
@@ -149,6 +160,9 @@ export async function viewCard(device: StaffDevice, cardId: string): Promise<Sta
     memberSince: new Date(parseDbDate(card.created_at) ?? Date.now()).toISOString(),
     visits: ((await (await getDb()).get("SELECT COUNT(*) AS n FROM stamp_events WHERE card_id = ? AND kind = 'stamp' AND undone_at IS NULL", card.id)) as { n: number }).n,
     stampedMinutesAgo: await cooldownMinutesLeft(device.venueId, card.id),
+    birthday: await birthdayTreat(venue, card, customer.birthday_month, customer.birthday_day),
+    birthdayDate: customer.birthday_month && customer.birthday_day ? { month: customer.birthday_month, day: customer.birthday_day } : null,
+    asksBirthday: birthdayAskOn(venue),
   };
 }
 
@@ -202,7 +216,52 @@ export async function redeemReward(device: StaffDevice, cardId: string, tierInde
   return await viewCard(device, cardId);
 }
 
-/** Reverses the last stamp or redemption on this card, if made in the last few minutes. */
+/**
+ * Signs a guest up at the counter, once staff have asked and the guest
+ * agreed to join. An email that's already a member opens their existing
+ * card instead.
+ */
+export async function enrollAtTill(device: StaffDevice, input: StaffEnrollInput, origin: string): Promise<StaffEnrollResponse> {
+  await stampVenue(device);
+  const email = normaliseEmail(input.email);
+  if (!isPlausibleEmail(email)) throw new ServiceError(400, "Enter the guest's email address.");
+  const name = input.name.trim();
+  const joined = await enroll(
+    { venueId: device.venueId, email, name, firstName: name.split(/\s+/)[0], captureSource: "till", birthday: input.birthday, agreed: true },
+    origin,
+  );
+  await touchDevice(device.id);
+  return { cardId: joined.cardId, wasExisting: joined.wasExisting };
+}
+
+/** Adds or corrects the guest's birthday, with them at the counter (only where the venue asks for birthdays). */
+export async function setGuestBirthday(device: StaffDevice, cardId: string, month: number, day: number): Promise<StaffCardView> {
+  const venue = await stampVenue(device);
+  if (!birthdayAskOn(venue)) throw new ServiceError(400, "This venue doesn't ask for birthdays.");
+  if (!isValidBirthday(month, day)) throw new ServiceError(400, "That date doesn't exist.");
+  const card = await requireCard(device, cardId);
+  await changeBirthday(await getDb(), card.customer_id, month, day);
+  await touchDevice(device.id);
+  return await viewCard(device, cardId);
+}
+
+/** Hands over the birthday reward: once per birthday, recorded so a second visit or another till can't give it again. */
+export async function giveBirthdayReward(device: StaffDevice, cardId: string): Promise<StaffCardView> {
+  const venue = await stampVenue(device);
+  await transaction(async (db) => {
+    // Locked, so two tills tapping at once give it only once.
+    const card = await requireCard(device, cardId, true);
+    const guest = (await db.get("SELECT birthday_month, birthday_day FROM customers WHERE id = ?", card.customer_id)) as { birthday_month: number | null; birthday_day: number | null };
+    const treat = await birthdayTreat(venue, card, guest.birthday_month, guest.birthday_day);
+    if (!treat) throw new ServiceError(400, "There's no birthday reward on this card today.");
+    if (treat.given) throw new ServiceError(400, "Their birthday reward has already been given.");
+    await recordStampEvent(db, { venueId: device.venueId, cardId: card.id, kind: "birthday", delta: 0, rewardName: treat.reward, deviceId: device.id });
+  });
+  await touchDevice(device.id);
+  return await viewCard(device, cardId);
+}
+
+/** Reverses the last stamp, redemption or birthday reward on this card, if made in the last few minutes. */
 export async function undoLast(device: StaffDevice, cardId: string): Promise<StaffCardView> {
   const venue = await stampVenue(device);
   const goal = stampGoal(programTiers(venue.loyaltyProgram));

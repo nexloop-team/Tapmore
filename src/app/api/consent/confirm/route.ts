@@ -7,7 +7,7 @@ import { confirmConsent } from "@/server/services/consent";
  * (GET) before people do, and a scanner must not say yes for the guest.
  */
 export async function POST(request: Request) {
-  rateLimit(request, "consent", 30);
+  await rateLimit(request, "consent", 30);
   const form = await request.formData().catch(() => null);
   const token = String(form?.get("token") ?? "");
   const confirmed = token.length > 0 && await confirmConsent(await getDb(), token);

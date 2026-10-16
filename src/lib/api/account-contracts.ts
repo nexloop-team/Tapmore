@@ -28,8 +28,6 @@ export type UpdateAccountRequest = z.input<typeof updateAccountRequest>;
 export const changePasswordRequest = z.object({ currentPassword: z.string().min(1).max(200), newPassword: password });
 export type ChangePasswordRequest = z.input<typeof changePasswordRequest>;
 
-export const notificationPrefsRequest = z.object({ venueId: z.string().trim().min(1).max(128), weeklyDigest: z.boolean() });
-export type NotificationPrefsRequest = z.input<typeof notificationPrefsRequest>;
 
 export const deleteAccountRequest = z.object({ password: z.string().min(1, "Enter your password").max(200) });
 export type DeleteAccountRequest = z.input<typeof deleteAccountRequest>;

@@ -99,7 +99,7 @@ export default async function VenueOverview({ params, searchParams }: PageProps<
 
   const hostedItems = config.menus.reduce((sum, menu) => sum + menu.sections.reduce((n, section) => n + section.items.length, 0), 0);
   const checklist: { done: boolean; label: string; cta: string; href: string; why: string; icon?: ReactNode; help?: string }[] = [
-    { done: !!config.branding.logoUrl, label: "Add your logo", cta: "Upload", href: `${base}/design#logo`, why: "It sits on your page, your QR cards and every email guests get." },
+    { done: !!config.branding.logoUrl, label: "Add your logo", cta: "Upload", href: `${base}/design#logo`, why: "It sits on your page and your printed QR cards." },
     { done: hostedItems > 0 || config.menus.some((menu) => !!menu.externalUrl), label: "Add your menu", cta: "Add your menu", href: `${base}/menu`, why: "Type it in, or take a photo of your printed menu and we'll read it." },
     { done: !!config.wifi?.ssid, label: "Share your Wi-Fi", cta: "Add Wi-Fi", href: `${base}/design#wifi`, why: "Guests copy the password in one tap, so nobody has to ask at the counter." },
     { done: googleLinked, label: "Link your Google reviews", cta: "Add the link", href: `${base}/design#google`, why: "Guests who loved their visit can't find your review page yet. It takes a minute.", help: `${base}/design#google` },

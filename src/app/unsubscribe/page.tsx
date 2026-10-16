@@ -9,7 +9,7 @@ import "@/styles/pages.css";
 export const metadata: Metadata = { title: "Unsubscribe", robots: { index: false, follow: false }, referrer: "no-referrer" };
 
 /**
- * Linked from every offer email. Asks for a click rather than unsubscribing
+ * Linked from every birthday email. Asks for a click rather than unsubscribing
  * on page load, because email scanners open links before people do.
  */
 export default async function UnsubscribePage({ searchParams }: PageProps<"/unsubscribe">) {
@@ -19,7 +19,7 @@ export default async function UnsubscribePage({ searchParams }: PageProps<"/unsu
       <main className="page-wrapper simple-page">
         <div className="simple-card">
           <h1>You&apos;re unsubscribed</h1>
-          <p>You won&apos;t get offers from this venue any more. Your loyalty card still works as before.</p>
+          <p>You won&apos;t get birthday emails from this venue any more. Your loyalty card still works as before.</p>
         </div>
       </main>
     );
@@ -31,15 +31,15 @@ export default async function UnsubscribePage({ searchParams }: PageProps<"/unsu
     <main className="page-wrapper simple-page">
       <div className="simple-card">
         {guest && venueName ? (
-          guest.consent === "declined" ? (
+          guest.unsubscribed ? (
             <>
               <h1>Already unsubscribed</h1>
-              <p>You don&apos;t get offers from {venueName}.</p>
+              <p>You don&apos;t get birthday emails from {venueName}.</p>
             </>
           ) : (
             <>
-              <h1>Stop emails from {venueName}?</h1>
-              <p>You&apos;ll stop getting offers and birthday treats. Your loyalty card and stamps stay as they are.</p>
+              <h1>Stop birthday emails from {venueName}?</h1>
+              <p>You&apos;ll stop getting birthday emails. Your loyalty card and stamps stay as they are.</p>
               <form method="post" action="/api/unsubscribe" style={{ marginTop: 18 }}>
                 <input type="hidden" name="token" value={token} />
                 <button type="submit" className="primary-btn">

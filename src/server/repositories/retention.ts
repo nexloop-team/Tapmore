@@ -87,15 +87,19 @@ export async function ensureUnsubscribeToken(customerId: string): Promise<string
   return ((await db.get("SELECT unsubscribe_token FROM customers WHERE id = ?", customerId)) as { unsubscribe_token: string }).unsubscribe_token;
 }
 
-export async function findByUnsubscribeToken(token: string): Promise<{ customerId: string; venueId: string; consent: string } | null> {
-  const row = (await (await getDb()).get("SELECT id, venue_id, marketing_consent FROM customers WHERE unsubscribe_token = ?", token)) as
-    | { id: string; venue_id: string; marketing_consent: string }
+export async function findByUnsubscribeToken(token: string): Promise<{ customerId: string; venueId: string; unsubscribed: boolean } | null> {
+  const row = (await (await getDb()).get("SELECT id, venue_id, emails_unsubscribed_at FROM customers WHERE unsubscribe_token = ?", token)) as
+    | { id: string; venue_id: string; emails_unsubscribed_at: string | null }
     | undefined;
-  return row ? { customerId: row.id, venueId: row.venue_id, consent: row.marketing_consent } : null;
+  return row ? { customerId: row.id, venueId: row.venue_id, unsubscribed: !!row.emails_unsubscribed_at } : null;
 }
 
+/** Stops the venue's birthday emails, and withdraws any agreement to offers. The card itself keeps working. */
 export async function unsubscribe(customerId: string) {
-  (await (await getDb()).run("UPDATE customers SET marketing_consent = 'declined', consent_updated_at = now() WHERE id = ?", customerId));
+  (await (await getDb()).run(
+    "UPDATE customers SET emails_unsubscribed_at = COALESCE(emails_unsubscribed_at, now()), marketing_consent = 'declined', consent_updated_at = now() WHERE id = ?",
+    customerId,
+  ));
 }
 
 export interface EmailableGuest {
@@ -104,32 +108,18 @@ export interface EmailableGuest {
   firstName: string | null;
 }
 
-/** Opted-in guests whose birthday is on this month/day. */
+/**
+ * Card members whose birthday is on this month/day, who haven't unsubscribed.
+ * Only members who agreed to the membership's emails (the "I agree to join"
+ * box, or staff confirming it at the till), or who once said yes to offers:
+ * members from before that box existed never agreed to birthday emails.
+ */
 export async function birthdayGuests(venueId: string, month: number, days: number[]): Promise<EmailableGuest[]> {
   const rows = (await (await getDb()).all(
-      `SELECT id, email, first_name FROM customers
-        WHERE venue_id = ? AND marketing_consent = 'granted' AND birthday_month = ?
-          AND birthday_day IN (${days.map(() => "?").join(", ")})`, venueId, month, ...days)) as { id: string; email: string; first_name: string | null }[];
+      `SELECT c.id, c.email, c.first_name FROM customers c
+        WHERE c.venue_id = ? AND c.emails_unsubscribed_at IS NULL AND c.birthday_month = ?
+          AND (c.membership_agreed_at IS NOT NULL OR c.marketing_consent = 'granted')
+          AND c.birthday_day IN (${days.map(() => "?").join(", ")})
+          AND EXISTS (SELECT 1 FROM loyalty_cards l WHERE l.customer_id = c.id)`, venueId, month, ...days)) as { id: string; email: string; first_name: string | null }[];
   return rows.map((row) => ({ id: row.id, email: row.email, firstName: row.first_name }));
-}
-
-/**
- * Opted-in guests not seen for `days` days. "Seen" is the latest stamp,
- * redemption or Wi-Fi visit, falling back to when they joined.
- */
-export async function lapsedGuests(venueId: string, days: number, limit = 200): Promise<(EmailableGuest & { lastSeen: string })[]> {
-  const rows = (await (await getDb()).all(
-      `SELECT * FROM (
-         SELECT c.id, c.email, c.first_name,
-                GREATEST(
-                  c.created_at,
-                  COALESCE((SELECT MAX(s.created_at) FROM stamp_events s JOIN loyalty_cards l ON l.id = s.card_id
-                             WHERE l.customer_id = c.id AND s.kind IN ('stamp', 'redeem') AND s.undone_at IS NULL), c.created_at),
-                  COALESCE((SELECT MAX(v.created_at) FROM visits v WHERE v.customer_id = c.id), c.created_at)
-                ) AS last_seen
-           FROM customers c
-          WHERE c.venue_id = ? AND c.marketing_consent = 'granted'
-       ) AS guests WHERE last_seen < now() + CAST(? AS INTERVAL)
-       LIMIT ?`, venueId, `-${days} days`, limit)) as { id: string; email: string; first_name: string | null; last_seen: string }[];
-  return rows.map((row) => ({ id: row.id, email: row.email, firstName: row.first_name, lastSeen: row.last_seen }));
 }

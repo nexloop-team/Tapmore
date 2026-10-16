@@ -15,6 +15,7 @@ export interface CustomerRow {
   marketing_consent: ConsentState;
   age_attested: number;
   consent_token: string | null;
+  consent_updated_at: string | null;
   birthday_month: number | null;
   birthday_day: number | null;
   birthday_skips: number;
@@ -67,17 +68,36 @@ export async function setConsent(db: Db, customerId: string, state: ConsentState
     "UPDATE customers SET marketing_consent = ?, age_attested = ?, consent_token = ?, consent_updated_at = now() WHERE id = ?", state, ageAttested ? 1 : 0, token, customerId));
 }
 
+/**
+ * Staff at the till set or correct a guest's birthday, with the guest in
+ * front of them. Unlike a join form this may change one already given; the
+ * reward stays once per birthday whatever the date says.
+ */
+export async function changeBirthday(db: Db, customerId: string, month: number, day: number) {
+  (await db.run("UPDATE customers SET birthday_month = ?, birthday_day = ? WHERE id = ?", month, day, customerId));
+}
+
+/** The guest ticked "I agree to join" (or told staff so): kept as the record of their agreement. */
+export async function recordMembershipAgreement(db: Db, customerId: string) {
+  (await db.run("UPDATE customers SET membership_agreed_at = COALESCE(membership_agreed_at, now()), age_attested = 1 WHERE id = ?", customerId));
+}
+
 /** Records a birthday once. Joins aren't signed in, so a later form can't change one already given. */
 export async function setBirthday(db: Db, customerId: string, month: number, day: number) {
   (await db.run("UPDATE customers SET birthday_month = ?, birthday_day = ? WHERE id = ? AND birthday_month IS NULL", month, day, customerId));
 }
 
-export async function recordBirthdaySkip(db: Db, customerId: string) {
-  (await db.run("UPDATE customers SET birthday_skips = birthday_skips + 1 WHERE id = ?", customerId));
-}
 
+/**
+ * At most one visit of a kind per guest a day, so repeating the Wi-Fi gate
+ * with someone's email can't pile up visits for them. (20 hours, not 24: a
+ * regular who comes a little earlier tomorrow still counts.)
+ */
 export async function recordVisit(db: Db, venueId: string, customerId: string, type: string) {
-  (await db.run("INSERT INTO visits (venue_id, customer_id, type) VALUES (?, ?, ?)", venueId, customerId, type));
+  (await db.run(
+    `INSERT INTO visits (venue_id, customer_id, type) SELECT ?, ?, ?
+      WHERE NOT EXISTS (SELECT 1 FROM visits WHERE venue_id = ? AND customer_id = ? AND type = ? AND created_at > now() - INTERVAL '20 hours')`,
+    venueId, customerId, type, venueId, customerId, type));
 }
 
 /**

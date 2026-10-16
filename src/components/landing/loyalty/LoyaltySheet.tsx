@@ -3,10 +3,10 @@
 import { useState } from "react";
 import { enrolEmailCopy } from "@/lib/landing-copy";
 import { isPlausibleEmail } from "@/lib/validation";
-import { birthdayAskOn, consentAskOn } from "@/lib/venue/features";
+import { birthdayAskOn } from "@/lib/venue/features";
 import type { LoyaltyProgram } from "@/lib/venue/types";
 import { useSheet } from "../FeatureCard";
-import { BirthdayFields, ConsentLine, EMPTY_BIRTHDAY, Field, SuccessPanel, JoinedCard, birthdayAnswer } from "../forms";
+import { BirthdayFields, EMPTY_BIRTHDAY, JoinAgreement, Field, SuccessPanel, JoinedCard, birthdayAnswer } from "../forms";
 import { useLanding } from "../LandingContext";
 import { useStampJoin } from "../useJoin";
 
@@ -45,16 +45,15 @@ export function LoyaltySheet() {
   const join = useStampJoin();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [consent, setConsent] = useState(false);
+  const [agreed, setAgreed] = useState(false);
   const [birthday, setBirthday] = useState(EMPTY_BIRTHDAY);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const program = venue.loyaltyProgram!;
-  const showConsent = consentAskOn(venue);
-  // The birthday is only ever used with marketing consent, so it only sits beside that box.
-  const showBirthday = showConsent && birthdayAskOn(venue);
-  const valid = name.trim().length > 0 && isPlausibleEmail(email);
+  // Optional, for the birthday reward.
+  const showBirthday = birthdayAskOn(venue);
+  const valid = name.trim().length > 0 && isPlausibleEmail(email) && agreed;
 
   if (membership) {
     const { response, email: joinedEmail } = membership;
@@ -62,7 +61,6 @@ export function LoyaltySheet() {
       <div className="sheet-inner">
         <SuccessPanel icon="check" title={t(response.wasExisting ? "already_enrolled" : "youre_enrolled")} onClose={close}>
           <p>{enrolEmailCopy(response, joinedEmail, t, tf)}</p>
-          {response.confirmationPending && <p className="confirm-notice">{t("check_inbox_confirm")}</p>}
           <JoinedCard response={response} />
         </SuccessPanel>
       </div>
@@ -81,8 +79,8 @@ export function LoyaltySheet() {
       name,
       email,
       captureSource: "landing",
-      consent: showConsent ? consent : undefined,
-      birthday: showBirthday && consent ? birthdayAnswer(birthday) : null,
+      agreed,
+      birthday: showBirthday ? birthdayAnswer(birthday) : null,
     });
     setBusy(false);
     if (!result.ok) {
@@ -90,7 +88,6 @@ export function LoyaltySheet() {
       return;
     }
     track(result.response.wasExisting ? "loyalty_signup_already_enrolled" : "loyalty_signup_completed");
-    if (result.response.confirmationPending) track("consent_confirmation_sent", { source: "loyalty" });
   }
 
   return (
@@ -116,7 +113,7 @@ export function LoyaltySheet() {
             <BirthdayFields value={birthday} onChange={setBirthday} />
           </div>
         )}
-        {showConsent && <ConsentLine checked={consent} onChange={setConsent} />}
+        <JoinAgreement checked={agreed} onChange={setAgreed} />
         <button type="submit" className={`primary-btn${busy ? " busy" : ""}`} disabled={!valid || busy}>
           {busy ? t("enrolling") : t("join_loyalty")}
         </button>

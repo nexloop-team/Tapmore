@@ -60,13 +60,21 @@ export async function markPassEmailed(db: Db, cardId: string) {
 }
 
 /** For the public card page: the id alone is not enough, the emailed token is required. */
+/** The guest who holds this card at this venue, given its private token; null otherwise. */
+export async function findCardHolder(db: Db, venueId: string, cardId: string, token: string): Promise<string | null> {
+  const row = (await db.get("SELECT customer_id FROM loyalty_cards WHERE id = ? AND access_token = ? AND venue_id = ?", cardId, token, venueId)) as
+    | { customer_id: string }
+    | undefined;
+  return row?.customer_id ?? null;
+}
+
 export async function findCardForViewer(cardId: string, token: string) {
   return (
     ((await (await getDb()).get(
-        `SELECT c.id, c.stamps, c.created_at, c.venue_id, cu.first_name, cu.name
+        `SELECT c.id, c.stamps, c.created_at, c.venue_id, cu.first_name, cu.name, cu.birthday_month, cu.birthday_day
            FROM loyalty_cards c JOIN customers cu ON cu.id = c.customer_id
           WHERE c.id = ? AND c.access_token = ?`, cardId, token)) as
-      | { id: string; stamps: number; created_at: string; venue_id: string; first_name: string | null; name: string | null }
+      | { id: string; stamps: number; created_at: string; venue_id: string; first_name: string | null; name: string | null; birthday_month: number | null; birthday_day: number | null }
       | undefined) ?? null
   );
 }

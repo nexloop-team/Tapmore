@@ -4,7 +4,7 @@ import { resetPassword } from "@/server/services/accounts";
 
 export const POST = handle(async (request) => {
   assertSameOrigin(request);
-  rateLimit(request, "reset", 10);
+  await rateLimit(request, "reset", 10);
   const { token, password } = await parseBody(request, resetPasswordRequest);
   await resetPassword(token, password);
   return Response.json({ ok: true });

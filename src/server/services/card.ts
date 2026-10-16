@@ -6,6 +6,16 @@ import { findCardForViewer } from "../repositories/loyalty-cards";
 import { ensureReferralCode } from "../repositories/retention";
 import { findVenue } from "../repositories/venues";
 import { qrSvg } from "./qr";
+import { birthdayTreat } from "./birthday";
+
+/** The birthday reward still to be given, for the member's own card. */
+async function openBirthdayReward(
+  venue: Parameters<typeof birthdayTreat>[0],
+  card: { id: string; birthday_month: number | null; birthday_day: number | null },
+): Promise<string | null> {
+  const treat = await birthdayTreat(venue, card, card.birthday_month, card.birthday_day);
+  return treat && !treat.given ? treat.reward : null;
+}
 
 /**
  * Everything a member's card shows, for whoever holds the card's private
@@ -38,5 +48,6 @@ export async function memberCardView(cardId: string, token: string, origin: stri
           friendStamps: referral.friendStamps,
         }
       : null,
+    birthdayTreat: await openBirthdayReward(venue, card),
   };
 }

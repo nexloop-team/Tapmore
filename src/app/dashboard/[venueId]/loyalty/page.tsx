@@ -24,14 +24,14 @@ export default async function LoyaltyPage({ params }: PageProps<"/dashboard/[ven
       </div>
       <LoyaltyEditor
         venueId={venue.id}
-        venueType={venue.config.venueType}
         initial={{ loyaltyProgram: program ?? null, crm }}
         referralStats={await referralStats(venue.id)}
         previewUrl={`/s?i=${encodeURIComponent(venue.shortCode)}&s=preview`}
         automations={settings.automations}
+        feedbackStamp={settings.stampPolicy.feedbackStamp}
         till={
           <>
-            <StaffDevices venueId={venue.id} devices={await listStaffDevices(venue.id)} cooldownMinutes={settings.stampPolicy.cooldownMinutes} feedbackStamp={settings.stampPolicy.feedbackStamp} enabled={!!program && program.stampsEnabled !== false} />
+            <StaffDevices venueId={venue.id} devices={await listStaffDevices(venue.id)} cooldownMinutes={settings.stampPolicy.cooldownMinutes} enabled={!!program && program.stampsEnabled !== false} />
             <StaffMembers venueId={venue.id} members={await listStaffMembers(venue.id)} />
           </>
         }

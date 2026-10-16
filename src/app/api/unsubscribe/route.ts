@@ -2,12 +2,12 @@ import { rateLimit } from "@/server/http";
 import { findByUnsubscribeToken, unsubscribe } from "@/server/repositories/retention";
 
 /**
- * Unsubscribe from a venue's offers. Used by the button on /unsubscribe and
+ * Unsubscribe from a venue's birthday emails. Used by the button on /unsubscribe and
  * by mail apps' one-click unsubscribe (RFC 8058), which POST to the
  * List-Unsubscribe URL with the token in the query string.
  */
 export async function POST(request: Request) {
-  rateLimit(request, "unsubscribe", 30);
+  await rateLimit(request, "unsubscribe", 30);
   let token = new URL(request.url).searchParams.get("token") ?? "";
   if (!token) {
     const form = await request.formData().catch(() => null);

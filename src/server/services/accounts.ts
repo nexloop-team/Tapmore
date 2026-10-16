@@ -46,8 +46,8 @@ export async function signup(input: z.output<typeof signupRequest>, origin: stri
 export async function login(input: z.output<typeof loginRequest>, ip: string): Promise<User> {
   // Per account and address, so one person can't lock an owner out by
   // guessing; and a looser cap per account, so a botnet can't grind one password.
-  rateLimitKey(`login:${input.email}:${ip}`, 10, 15 * 60_000);
-  rateLimitKey(`login:${input.email}`, 100, 60 * 60_000);
+  await rateLimitKey(`login:${input.email}:${ip}`, 10, 15 * 60_000);
+  await rateLimitKey(`login:${input.email}`, 100, 60 * 60_000);
   const found = await findUserCredentials(input.email);
   const ok = await verifyPassword(input.password, found?.passwordHash ?? (await dummyPasswordHash()));
   if (!found || !ok) throw new ServiceError(401, "That email and password don't match");
@@ -62,7 +62,7 @@ export async function logout() {
 
 /** Always succeeds from the caller's view, so it can't be used to discover accounts. */
 export async function requestPasswordReset(email: string, origin: string) {
-  rateLimitKey(`reset:${email}`, 3, 15 * 60_000);
+  await rateLimitKey(`reset:${email}`, 3, 15 * 60_000);
   const found = await findUserCredentials(email);
   if (!found || found.user.blocked) return;
   await sendPasswordResetEmail(found.user, origin);
@@ -95,7 +95,7 @@ export async function verifyEmail(token: string): Promise<boolean> {
 }
 
 export async function changePassword(user: User, input: z.output<typeof changePasswordRequest>) {
-  rateLimitKey(`password:${user.id}`, 5, 15 * 60_000);
+  await rateLimitKey(`password:${user.id}`, 5, 15 * 60_000);
   const hash = await findPasswordHash(user.id);
   if (!hash || !(await verifyPassword(input.currentPassword, hash))) throw new ServiceError(400, "Your current password isn't right");
   await updatePasswordHash(user.id, await hashPassword(input.newPassword));
@@ -104,7 +104,7 @@ export async function changePassword(user: User, input: z.output<typeof changePa
 
 /** Deletes the account and every venue it alone owns, with those venues' guest data. */
 export async function deleteAccount(user: User, password: string) {
-  rateLimitKey(`delete:${user.id}`, 5, 15 * 60_000);
+  await rateLimitKey(`delete:${user.id}`, 5, 15 * 60_000);
   const hash = await findPasswordHash(user.id);
   if (!hash || !(await verifyPassword(password, hash))) throw new ServiceError(400, "That password isn't right");
   await removeAccount(user.id);

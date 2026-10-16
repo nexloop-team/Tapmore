@@ -3,7 +3,7 @@ import { venueFromRequest } from "@/server/dashboard";
 import { handle, parseBody, ServiceError } from "@/server/http";
 import { getVenueSettings, saveVenueSettings } from "@/server/repositories/venues";
 
-/** Owner-only settings (stamp policy, automatic emails); only the fields sent change. */
+/** Owner-only settings (stamp policy, birthday reward); only the fields sent change. */
 export const PATCH = handle(async (request, ctx: RouteContext<"/api/dashboard/venues/[venueId]/settings">) => {
   const { venue } = await venueFromRequest(request, (await ctx.params).venueId, { write: true });
   const patch = await parseBody(request, venueSettingsPatch);

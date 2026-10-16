@@ -1,7 +1,8 @@
 "use client";
 
-import { QrCode } from "lucide-react";
+import { Cake, QrCode } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { DeleteMyCard } from "@/components/card/CardLive";
 import { InviteFriend } from "@/components/card/InviteFriend";
 import { api, ApiRequestError } from "@/lib/api/client";
 import type { MemberCardView } from "@/lib/api/contracts";
@@ -92,6 +93,12 @@ export function MyCard({ credentials, active = true, onMissing }: { credentials:
         </ol>
       )}
       {ready && <p className="member-card-ready">{tf("card_reward_ready", { reward: ready.rewardName })}</p>}
+      {card.birthdayTreat && (
+        <p className="member-card-ready member-card-birthday">
+          <Cake aria-hidden />
+          {tf("card_birthday_treat", { treat: card.birthdayTreat.replace(/[.!]+$/, "") })}
+        </p>
+      )}
 
       {card.tiers.length > 0 && card.goal > 0 && (
         <ul className="tier-ladder">
@@ -146,6 +153,29 @@ export function MyCard({ credentials, active = true, onMissing }: { credentials:
           }}
         />
       )}
+
+      <div className="my-card-links">
+        <p className="rc-different">
+          <button
+            type="button"
+            className="link-btn"
+            onClick={() => {
+              deviceMemory.forgetCard(venue.id);
+              onMissing?.();
+            }}
+          >
+            {card.holder ? tf("rc_not_you", { name: card.holder }) : t("rc_different_card")}
+          </button>
+        </p>
+        <DeleteMyCard
+          venueId={venue.id}
+          shortCode={venue.shortCode}
+          cardId={credentials.cardId}
+          token={credentials.token}
+          labels={{ action: t("rc_delete"), confirm: tf("rc_delete_confirm", { business: venue.name }), done: t("rc_deleted"), failed: t("something_wrong") }}
+          onDeleted={onMissing}
+        />
+      </div>
     </div>
   );
 }

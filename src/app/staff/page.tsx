@@ -1,4 +1,4 @@
-import { ScanLine, Search } from "lucide-react";
+import { ScanLine, Search, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { ScanCardButton } from "@/components/staff/ScanCardButton";
 import { formatSince, initials } from "@/lib/format";
@@ -36,7 +36,7 @@ export default async function StaffHome({ searchParams }: PageProps<"/staff">) {
           <>
             <h1>This isn&apos;t a staff device yet</h1>
             <p>
-              Sign in with your staff login, or ask the venue owner to pair this device from their dashboard: <strong>Loyalty &amp; capture → Staff devices</strong>.
+              Sign in with your staff login, or ask the venue owner to pair this device from their dashboard: <strong>Loyalty &amp; capture → Till</strong>.
             </p>
             <a className="staff-btn staff-btn-secondary" href="/login?next=%2Fstaff">
               Sign in with a staff login
@@ -64,6 +64,9 @@ export default async function StaffHome({ searchParams }: PageProps<"/staff">) {
         <Search aria-hidden />
         <input name="q" defaultValue={q} placeholder="Name or email" aria-label="Find a member by name or email" autoComplete="off" />
       </form>
+      <Link className="staff-btn staff-btn-secondary" href="/staff/new-member">
+        <UserPlus aria-hidden /> Add a new member
+      </Link>
 
       {recent.length > 0 && (
         <section aria-label="Recent">

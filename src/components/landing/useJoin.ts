@@ -20,11 +20,13 @@ function useRecordJoin() {
   const { venue, rememberCustomer, setMembership, setLoyaltyDone } = useLanding();
   return useCallback(
     (response: EnrollResponse, email: string) => {
-      deviceMemory.rememberCustomer(venue.id, response.customerId);
+      if (response.customerId) {
+        deviceMemory.rememberCustomer(venue.id, response.customerId);
+        rememberCustomer(response.customerId);
+      }
       // Next visit, the guest page shows this card instead of the join form.
       const card = cardCredentialsFromUrl(response.cardUrl);
       if (card) deviceMemory.rememberCard(venue.id, card);
-      rememberCustomer(response.customerId);
       setMembership({ response, email });
       if (!response.wasExisting) setLoyaltyDone();
     },
@@ -39,8 +41,8 @@ interface StampJoinInput {
   captureSource: "landing" | "feedback";
   /** The feedback just posted, which is what earns a feedback join its stamp. */
   feedbackReceipt?: FeedbackResponse["stampReceipt"];
-  /** Only sent when the consent box was actually shown. */
-  consent?: boolean;
+  /** The guest ticked "I agree to join". */
+  agreed: boolean;
   birthday?: { month: number; day: number } | null;
 }
 
@@ -60,8 +62,7 @@ export function useStampJoin() {
           initialStamps: input.initialStamps,
           feedbackReceipt: input.feedbackReceipt ?? undefined,
           captureSource: input.captureSource,
-          marketingConsent: input.consent,
-          ageAttested: input.consent,
+          agreed: input.agreed ? true : undefined,
           birthday: input.birthday ?? undefined,
           locale: currentLocale(),
           ref: storedReferral(venue.id),
@@ -79,12 +80,12 @@ export function useStampJoin() {
 interface RewardsJoinInput {
   email: string;
   firstName: string;
-  ageAttested: boolean;
+  agreed: boolean;
   door: "home" | "feedback";
   birthday?: { month: number; day: number } | null;
 }
 
-/** Rewards-only membership: no stamps, no consent box of its own — the button is the consent. */
+/** Rewards-only membership: no stamps; the same "I agree to join" box as the stamp card. */
 export function useRewardsJoin() {
   const { venue, track } = useLanding();
   const recordJoin = useRecordJoin();
@@ -92,6 +93,7 @@ export function useRewardsJoin() {
     async (input: RewardsJoinInput): Promise<JoinResult> => {
       const email = normaliseEmail(input.email);
       if (!isPlausibleEmail(email)) return { ok: false, error: "rewards_email_required" };
+      if (!input.agreed) return { ok: false, error: "join_agree_required" };
       track("rewards_join_tapped", { context: input.door });
       try {
         const response = await api.enroll({
@@ -99,10 +101,9 @@ export function useRewardsJoin() {
           email,
           firstName: input.firstName.trim() || undefined,
           captureSource: "rewards",
-          joined: true,
           door: input.door,
-          ageAttested: input.ageAttested,
-          birthday: input.ageAttested ? (input.birthday ?? undefined) : undefined,
+          agreed: true,
+          birthday: input.birthday ?? undefined,
           locale: currentLocale(),
         });
         recordJoin(response, email);

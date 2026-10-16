@@ -24,12 +24,13 @@ export function linkLabel(token: string | null | undefined, custom: string | nul
 }
 
 /**
- * What a stamp-card join says about the email. A returning member is always
- * pointed at their inbox (they were emailed when they first joined), which
- * holds because the copy makes no claim about *when* it was sent.
+ * What a stamp-card join says about the email. A returning member is emailed
+ * again at once; only past the resend cap are they pointed at the emails
+ * they already have.
  */
 export function enrolEmailCopy(response: EnrollResponse, email: string, t: Translate, tf: TranslateFormat): string {
-  if (response.wasExisting || response.passEmailed) return tf("pass_sent_to", { email: maskEmail(email) });
+  if (response.passEmailed) return tf("pass_sent_to", { email: maskEmail(email) });
+  if (response.wasExisting) return tf("pass_recently_sent", { email: maskEmail(email) });
   return t("pass_not_emailed");
 }
 
@@ -41,5 +42,6 @@ export function enrolEmailCopy(response: EnrollResponse, email: string, t: Trans
 export function rewardsPassLine(response: EnrollResponse, email: string, renderButtons: boolean, tf: TranslateFormat): string {
   const inHand = renderButtons && !!response.cardUrl;
   if (inHand) return "";
-  return tf(response.passEmailed ? "pass_on_its_way" : "pass_already_sent", { email: maskEmail(email) });
+  if (response.passEmailed) return tf("pass_on_its_way", { email: maskEmail(email) });
+  return tf(response.wasExisting ? "pass_recently_sent" : "pass_not_emailed", { email: maskEmail(email) });
 }
