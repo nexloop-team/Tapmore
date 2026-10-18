@@ -19,6 +19,11 @@ export function getPlatform(): PlatformKey {
  */
 export const subscribeNever = () => () => {};
 
+/** "smooth", unless the person asked their device for less motion: then scrolling jumps. */
+export function scrollMotion(): ScrollBehavior {
+  return typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+}
+
 /**
  * For useSyncExternalStore reads of localStorage that another tab may change:
  * opening the card link from an email saves the card there, and the guest
@@ -115,6 +120,23 @@ export const deviceMemory = {
   rememberCard: (venueId: string, card: CardCredentials) => safeStorage.set(`tt.card.${venueId}`, JSON.stringify(card)),
   forgetCard: (venueId: string) => safeStorage.set(`tt.card.${venueId}`, "null"),
 };
+
+/**
+ * Makes a big camera photo light enough to upload quickly on mobile data:
+ * scaled to `maxDim` and re-encoded as JPEG. PNG, GIF and WebP files (logos
+ * with transparency, animations) and photos already small are sent as they
+ * are; the server re-encodes every upload anyway.
+ */
+export async function shrinkPhotoForUpload(file: File, maxDim = 2400, quality = 0.85): Promise<File> {
+  if (file.type !== "image/jpeg" || file.size < 1_500_000) return file;
+  try {
+    const { dataUrl } = await compressImage(file, maxDim, quality);
+    const blob = await (await fetch(dataUrl)).blob();
+    return blob.size < file.size ? new File([blob], file.name.replace(/\.\w+$/, "") + ".jpg", { type: "image/jpeg" }) : file;
+  } catch {
+    return file;
+  }
+}
 
 /**
  * Downscales a photo to at most 1200px on its longest side and re-encodes it

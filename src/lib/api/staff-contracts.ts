@@ -3,19 +3,22 @@ import { z } from "zod";
 /** Requests from a paired staff device, and the owner's device management. */
 
 const cardId = z.string().trim().regex(/^crd_[A-Za-z0-9]{1,40}$/, "Invalid card");
+/** Chosen by the till for each action, so sending it twice (queued offline, a lost answer) changes the card once. */
+const requestId = z.string().trim().regex(/^[A-Za-z0-9-]{8,64}$/).optional();
 
 export const staffStampRequest = z.object({
   cardId,
   count: z.number().int().min(1).max(5).default(1),
   /** Staff confirmed "add another" inside the cooldown. */
   force: z.boolean().optional(),
+  requestId,
 });
 export type StaffStampRequest = z.input<typeof staffStampRequest>;
 
-export const staffRedeemRequest = z.object({ cardId, tierIndex: z.number().int().min(0).max(10) });
+export const staffRedeemRequest = z.object({ cardId, tierIndex: z.number().int().min(0).max(10), requestId });
 export type StaffRedeemRequest = z.input<typeof staffRedeemRequest>;
 
-export const staffUndoRequest = z.object({ cardId });
+export const staffUndoRequest = z.object({ cardId, requestId });
 export type StaffUndoRequest = z.input<typeof staffUndoRequest>;
 
 export const staffBirthdayRequest = z.object({ cardId });

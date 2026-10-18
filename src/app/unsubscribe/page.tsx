@@ -6,6 +6,9 @@ import { getVenueRecord } from "@/server/repositories/venues";
 import "@/styles/landing.css";
 import "@/styles/pages.css";
 
+// Blocks on purpose (Cache Components): opened from an email link; the token decides what the page says.
+export const instant = false;
+
 export const metadata: Metadata = { title: "Unsubscribe", robots: { index: false, follow: false }, referrer: "no-referrer" };
 
 /**

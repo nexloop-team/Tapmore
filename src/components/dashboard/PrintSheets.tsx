@@ -68,6 +68,8 @@ export function sheetCount(format: PrintFormat, tables: number): number {
 }
 
 export function PrintSheets({ venue, labels, color, format }: { venue: PrintVenue; labels: string[]; color: string; format: PrintFormat }) {
+  // Compiled by the React Compiler (annotation mode, see next.config): re-renders only what an edit touches.
+  "use memo";
   const logo = safeImageUrl(venue.branding.logoUrl);
   const theme = computeTheme(venue.branding);
   const title = headline(venue.offers);

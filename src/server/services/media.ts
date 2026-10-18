@@ -8,10 +8,43 @@ import { storage } from "../storage";
  * media/<venue>/ (disk or an S3-compatible bucket, see ../storage) and
  * served publicly from /media/<venue>/<file>. The type is decided from the
  * file's bytes, never its name or the browser's claim, and SVG is refused
- * because it can carry script.
+ * because it can carry script. New uploads are re-encoded as WebP; older
+ * files keep their original type.
  */
 const MAX_BYTES = 5 * 1024 * 1024;
 const MAX_FILES_PER_VENUE = 500;
+
+/**
+ * Longest side, in pixels, each kind of image is stored at: about three
+ * times the largest size it is shown at, for sharp phone screens. A logo
+ * shows in a small circle, a cover across the page, a dish photo in its sheet.
+ */
+export const MEDIA_KINDS = { logo: 512, cover: 1600, dish: 1200 } as const;
+export type MediaKind = keyof typeof MEDIA_KINDS;
+
+export function isMediaKind(value: unknown): value is MediaKind {
+  return typeof value === "string" && Object.hasOwn(MEDIA_KINDS, value);
+}
+
+/**
+ * Every upload is stored as WebP, scaled down to its kind's size: a 4 MB
+ * phone photo becomes a few hundred KB, which is what a guest on mobile data
+ * downloads. Turning by the camera's orientation happens first; everything
+ * else in the file's metadata (location included) is dropped. GIFs stay animated.
+ */
+async function optimise(bytes: Buffer, ext: string, kind: MediaKind): Promise<Buffer> {
+  const sharp = (await import("sharp")).default;
+  const max = MEDIA_KINDS[kind];
+  try {
+    return await sharp(bytes, { animated: ext === "gif" || ext === "webp", limitInputPixels: 60_000_000 })
+      .rotate()
+      .resize({ width: max, height: max, fit: "inside", withoutEnlargement: true })
+      .webp({ quality: 80 })
+      .toBuffer();
+  } catch {
+    throw new ServiceError(400, "We couldn't read that image. Try a different photo.");
+  }
+}
 
 const MEDIA_TYPES: Record<string, string> = { jpg: "image/jpeg", png: "image/png", webp: "image/webp", gif: "image/gif" };
 
@@ -23,15 +56,15 @@ export function sniff(bytes: Buffer): string | null {
   return null;
 }
 
-export async function saveVenueMedia(venueId: string, file: File): Promise<string> {
+export async function saveVenueMedia(venueId: string, file: File, kind: MediaKind): Promise<string> {
   if (file.size === 0) throw new ServiceError(400, "That file is empty");
   if (file.size > MAX_BYTES) throw new ServiceError(400, "Images must be under 5 MB");
   const bytes = Buffer.from(await file.arrayBuffer());
   const ext = sniff(bytes);
   if (!ext) throw new ServiceError(400, "Upload a JPEG, PNG, WebP or GIF image");
   if ((await storage().count(`media/${venueId}/`, MAX_FILES_PER_VENUE)) >= MAX_FILES_PER_VENUE) throw new ServiceError(400, "This venue has reached its image limit");
-  const name = `${newId("img")}.${ext}`;
-  await storage().put(`media/${venueId}/${name}`, bytes, MEDIA_TYPES[ext]);
+  const name = `${newId("img")}.webp`;
+  await storage().put(`media/${venueId}/${name}`, await optimise(bytes, ext, kind), MEDIA_TYPES.webp);
   return `/media/${venueId}/${name}`;
 }
 

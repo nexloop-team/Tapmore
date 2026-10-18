@@ -1,22 +1,21 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useOffline } from "next/offline";
+import { useTillQueue } from "./till-queue";
 
-function subscribe(callback: () => void) {
-  window.addEventListener("online", callback);
-  window.addEventListener("offline", callback);
-  return () => {
-    window.removeEventListener("online", callback);
-    window.removeEventListener("offline", callback);
-  };
-}
-
-/** "Online" with a green dot, or "Offline" when the till loses its connection (stamps won't save). */
+/**
+ * "Online" with a green dot, or "Offline" when the till can't reach us (the
+ * browser's own signal, or a request that failed: a dead Wi-Fi behind a
+ * working one counts too), with how many actions are waiting to be sent.
+ */
 export function OnlineStatus() {
-  const online = useSyncExternalStore(subscribe, () => navigator.onLine, () => true);
+  const offline = useOffline();
+  const { waiting } = useTillQueue();
+  const label = offline ? "Offline" : waiting.length > 0 ? "Sending…" : "Online";
   return (
-    <span className={`till-paired${online ? "" : " offline"}`} role="status">
-      <span aria-hidden /> {online ? "Online" : "Offline"}
+    <span className={`till-paired${offline ? " offline" : ""}`} role="status">
+      <span aria-hidden /> {label}
+      {waiting.length > 0 && ` · ${waiting.length} waiting`}
     </span>
   );
 }

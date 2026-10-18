@@ -4,7 +4,8 @@ import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { dashboardApi, errorMessage } from "@/lib/api/dashboard-client";
-import { CURRENCIES, VENUE_TYPES, type VenueConfig } from "@/lib/venue/schema";
+import { CURRENCIES, VENUE_TYPES } from "@/lib/venue/constants";
+import type { VenueConfig } from "@/lib/venue/schema";
 import { useConfirm } from "./confirm";
 import { Card, Field, SaveBar, TextField } from "./ui";
 import { useVenueDraft } from "./useVenueDraft";
@@ -12,6 +13,8 @@ import { useVenueDraft } from "./useVenueDraft";
 type Basics = Pick<VenueConfig, "name" | "venueType" | "currencyCode">;
 
 export function VenueBasicsForm({ venueId, initial }: { venueId: string; initial: Basics }) {
+  // Compiled by the React Compiler (annotation mode, see next.config): re-renders only what an edit touches.
+  "use memo";
   const editor = useVenueDraft<Basics>(venueId, initial);
   const { draft, update } = editor;
   return (

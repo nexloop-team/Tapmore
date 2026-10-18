@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /**
  * Live preview between the guest page editor and the preview frame: the
@@ -12,19 +12,30 @@ import { useEffect, useState } from "react";
 const DRAFT = "tapmore:draft";
 const READY = "tapmore:preview-ready";
 
-/** Editor side: send the draft to every live preview frame now, and to any frame that loads later. */
+/**
+ * Editor side: send the draft to every live preview frame, and to any frame
+ * that loads later. Fast typing is sent once per frame at most, so a big
+ * menu re-renders in the phone as often as the screen can show it, no more.
+ */
 export function useLivePreview(draft: unknown) {
+  const latest = useRef(draft);
   useEffect(() => {
-    for (const frame of document.querySelectorAll<HTMLIFrameElement>("iframe[data-live-preview]")) {
-      frame.contentWindow?.postMessage({ type: DRAFT, draft }, window.location.origin);
-    }
+    latest.current = draft;
+    const frameId = requestAnimationFrame(() => {
+      for (const frame of document.querySelectorAll<HTMLIFrameElement>("iframe[data-live-preview]")) {
+        frame.contentWindow?.postMessage({ type: DRAFT, draft }, window.location.origin);
+      }
+    });
+    return () => cancelAnimationFrame(frameId);
+  }, [draft]);
+  useEffect(() => {
     function onMessage(event: MessageEvent) {
       if (event.origin !== window.location.origin || event.data?.type !== READY) return;
-      (event.source as Window | null)?.postMessage({ type: DRAFT, draft }, window.location.origin);
+      (event.source as Window | null)?.postMessage({ type: DRAFT, draft: latest.current }, window.location.origin);
     }
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [draft]);
+  }, []);
 }
 
 /** Preview side: the latest draft from the editor, or null outside a preview frame. */

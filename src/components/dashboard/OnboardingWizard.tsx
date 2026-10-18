@@ -10,7 +10,8 @@ import { dashboardApi, errorMessage } from "@/lib/api/dashboard-client";
 import { initials } from "@/lib/format";
 import { PALETTES } from "@/lib/palettes";
 import { computeTheme, isLightColor } from "@/lib/theme";
-import { CURRENCIES, VENUE_TYPES, type CreateVenueRequest } from "@/lib/venue/schema";
+import { CURRENCIES, VENUE_TYPES } from "@/lib/venue/constants";
+import type { CreateVenueRequest } from "@/lib/venue/schema";
 import type { VenueBranding } from "@/lib/venue/types";
 import { Field, TextField } from "./ui";
 
@@ -73,6 +74,8 @@ function HexField({ value, onChange }: { value: string; onChange: (hex: string) 
 }
 
 export function OnboardingWizard({ defaultCurrency, exitHref, notice }: { defaultCurrency: (typeof CURRENCIES)[number]; exitHref: string | null; notice?: ReactNode }) {
+  // Compiled by the React Compiler (annotation mode, see next.config): re-renders only what an edit touches.
+  "use memo";
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [pending, setPending] = useState(false);
@@ -133,7 +136,6 @@ export function OnboardingWizard({ defaultCurrency, exitHref, notice }: { defaul
     try {
       const venue = await dashboardApi.createVenue(body);
       router.replace(`/dashboard/${venue.id}?welcome=1`);
-      router.refresh();
     } catch (err) {
       setError(errorMessage(err));
       setPending(false);

@@ -7,6 +7,9 @@ import { legalDetails } from "@/config/legal";
 import { PLAN_FEATURES, priceSentence, TRIAL_DAYS } from "@/lib/plans";
 import "@/styles/pages.css";
 
+// Blocks on purpose (Cache Components): the business details come from the server's settings at request time (see config/legal), so a change shows without a rebuild.
+export const instant = false;
+
 export const metadata: Metadata = { title: "About us" };
 
 /**

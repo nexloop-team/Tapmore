@@ -128,3 +128,73 @@ describe("staff stamping", () => {
     expect(stats.rewardsRedeemed).toBe(1);
   });
 });
+
+describe("live card check", () => {
+  it("moves its marker with every stamp and undo, and refuses a wrong token", async () => {
+    const { card, device } = await setup();
+    const start = await m.cards.findCardState(card.id, card.access_token);
+    expect(start?.stamps).toBe(0);
+    await m.staff.stampCard(device, card.id, 1, false);
+    const stamped = await m.cards.findCardState(card.id, card.access_token);
+    expect(stamped?.stamps).toBe(1);
+    expect(stamped?.version).not.toBe(start?.version);
+    await m.staff.undoLast(device, card.id);
+    const undone = await m.cards.findCardState(card.id, card.access_token);
+    expect(undone?.stamps).toBe(0);
+    // Back to 0 stamps, but the card did change: the marker differs from the start.
+    expect(undone?.version).not.toBe(start?.version);
+    expect(await m.cards.findCardState(card.id, "wrong")).toBeNull();
+  });
+
+  it("checks quickly at first, then slower, then stops", async () => {
+    const { nextCheckDelay } = await import("@/components/card/useCardChanges");
+    expect(nextCheckDelay(0)).toBe(4_000);
+    expect(nextCheckDelay(3 * 60_000)).toBe(15_000);
+    expect(nextCheckDelay(7 * 60_000)).toBe(30_000);
+    expect(nextCheckDelay(11 * 60_000)).toBeNull();
+  });
+});
+
+describe("guest venue lookup", () => {
+  it("is live on the trial or a paid plan, and paused otherwise", async () => {
+    const { venue } = await setup();
+    const db = await m.db.getDb();
+    expect((await m.venues.findVenue(venue.shortCode))?.id).toBe(venue.id);
+    expect(await m.venues.findPausedVenue(venue.shortCode)).toBeNull();
+
+    // Trial over, nothing paid: the page goes offline but the "Back soon" page knows the venue.
+    (await db.run("UPDATE subscriptions SET trial_ends_at = now() - INTERVAL '1 day' WHERE venue_id = ?", venue.id));
+    expect(await m.venues.findVenue(venue.shortCode)).toBeNull();
+    expect((await m.venues.findPausedVenue(venue.shortCode))?.name).toBe(venue.config.name);
+
+    // Paid: live again, by id or code.
+    (await db.run("UPDATE subscriptions SET plan = 'pro', status = 'active', current_period_end = now() + INTERVAL '30 days' WHERE venue_id = ?", venue.id));
+    expect((await m.venues.findVenue(venue.id))?.shortCode).toBe(venue.shortCode);
+
+    // Suspended beats paid.
+    await m.venues.setVenueStatus(venue.id, "suspended");
+    expect(await m.venues.findVenue(venue.shortCode)).toBeNull();
+    expect(await m.venues.findPausedVenue(venue.shortCode)).not.toBeNull();
+
+    // No subscription row at all counts as unpaid.
+    await m.venues.setVenueStatus(venue.id, "active");
+    (await db.run("DELETE FROM subscriptions WHERE venue_id = ?", venue.id));
+    expect(await m.venues.findVenue(venue.shortCode)).toBeNull();
+  });
+});
+
+describe("till resends", () => {
+  it("apply a stamp, undo or redeem once however often the same request arrives", async () => {
+    const { card, device } = await setup();
+    expect((await m.staff.stampCard(device, card.id, 2, false, "req-stamp-0001")).stamps).toBe(2);
+    // Queued offline, then sent again when the connection came back: still 2, and no cooldown refusal.
+    expect((await m.staff.stampCard(device, card.id, 2, false, "req-stamp-0001")).stamps).toBe(2);
+    expect((await m.staff.undoLast(device, card.id, "req-undo-0001")).stamps).toBe(0);
+    expect((await m.staff.undoLast(device, card.id, "req-undo-0001")).stamps).toBe(0);
+    expect((await m.staff.stampCard(device, card.id, 3, true, "req-stamp-0002")).stamps).toBe(3);
+    expect((await m.staff.redeemReward(device, card.id, 0, "req-redeem-001")).stamps).toBe(0);
+    expect((await m.staff.redeemReward(device, card.id, 0, "req-redeem-001")).stamps).toBe(0);
+    // A new request id is a new action.
+    expect((await m.staff.stampCard(device, card.id, 1, true, "req-stamp-0003")).stamps).toBe(1);
+  });
+});

@@ -1,14 +1,24 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { dashboardApi, errorMessage } from "@/lib/api/dashboard-client";
 import type { VenueConfig } from "@/lib/venue/schema";
 import { useToast } from "./toast";
 
 /**
+ * The dashboard's sidebar shows the venue's name and logo, rendered by the
+ * server; only a change to one of them needs the server's layout again.
+ */
+function sidebarChanged(before: Partial<VenueConfig>, after: Partial<VenueConfig>): boolean {
+  return ("name" in after && after.name !== before.name) || ("branding" in after && after.branding?.logoUrl !== before.branding?.logoUrl);
+}
+
+/**
  * Local draft of some top-level sections of a venue's config. Saving sends
  * just those sections; the server merges and validates the whole config.
+ * The editor already holds what it saved, so nothing is fetched again
+ * afterwards (the phone preview shows the draft live).
  */
 export function useVenueDraft<T extends Partial<VenueConfig>>(venueId: string, initial: T) {
   const router = useRouter();
@@ -17,9 +27,11 @@ export function useVenueDraft<T extends Partial<VenueConfig>>(venueId: string, i
   const [draft, setDraft] = useState(initial);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [version, setVersion] = useState(0);
 
-  const dirty = useMemo(() => JSON.stringify(saved) !== JSON.stringify(draft), [saved, draft]);
+  // Compared a beat behind the typing, so a big menu doesn't slow each keystroke.
+  const savedJson = useMemo(() => JSON.stringify(saved), [saved]);
+  const settledDraft = useDeferredValue(draft);
+  const dirty = useMemo(() => savedJson !== JSON.stringify(settledDraft), [savedJson, settledDraft]);
 
   useEffect(() => {
     if (!dirty) return;
@@ -39,39 +51,36 @@ export function useVenueDraft<T extends Partial<VenueConfig>>(venueId: string, i
       const venue = await dashboardApi.restoreVenue(venueId);
       const config = venue.config ?? {};
       const restored = Object.fromEntries(Object.keys(initial).map((key) => [key, config[key as keyof VenueConfig]])) as T;
+      if (sidebarChanged(saved, restored)) router.refresh();
       setSaved(restored);
       setDraft(restored);
-      setVersion((v) => v + 1);
-      router.refresh();
       toast({ text: "Undone. Your page is back to how it was." });
     } catch (err) {
-      toast({ text: errorMessage(err) });
+      toast({ text: errorMessage(err), tone: "error" });
     }
     // `initial` only supplies the field names, which never change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [venueId, router, toast]);
+  }, [venueId, saved, router, toast]);
 
   const save = useCallback(async () => {
     setSaving(true);
     setError(null);
     try {
       await dashboardApi.updateVenue(venueId, { config: draft });
+      if (sidebarChanged(saved, draft)) router.refresh();
       setSaved(draft);
-      setVersion((v) => v + 1);
-      router.refresh();
       toast({ text: "Changes saved. They're live on your page.", action: { label: "Undo", onClick: () => void restore() } });
     } catch (err) {
       setError(errorMessage(err));
     } finally {
       setSaving(false);
     }
-  }, [venueId, draft, router, toast, restore]);
+  }, [venueId, saved, draft, router, toast, restore]);
 
   const reset = useCallback(() => {
     setDraft(saved);
     setError(null);
   }, [saved]);
 
-  /** `version` bumps after each save, so a preview iframe keyed on it reloads. */
-  return { draft, setDraft, update, dirty, saving, error, save, reset, version };
+  return { draft, setDraft, update, dirty, saving, error, save, reset };
 }

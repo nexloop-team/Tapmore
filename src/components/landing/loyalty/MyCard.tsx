@@ -1,62 +1,77 @@
 "use client";
 
 import { Cake, QrCode } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { DeleteMyCard } from "@/components/card/CardLive";
+import { recentCardView, rememberCardView } from "@/components/card/card-cache";
+import { useCardChanges } from "@/components/card/useCardChanges";
 import { InviteFriend } from "@/components/card/InviteFriend";
 import { api, ApiRequestError } from "@/lib/api/client";
 import type { MemberCardView } from "@/lib/api/contracts";
 import { deviceMemory, type CardCredentials } from "@/lib/browser";
 import { useLanding } from "../LandingContext";
 
-const POLL_MS = 5000;
 const MAX_DRAWN_STAMPS = 20;
 
 /**
  * The member's card, right on the venue's page: stamps, rewards, the code
- * staff scan, and the invite link. Refreshes while it's on screen so a
- * stamp added at the till shows up straight away.
+ * staff scan, and the invite link. While it's on screen a cheap check
+ * notices changes made at the till, and only then is the card fetched again.
  */
 export function MyCard({ credentials, active = true, onMissing }: { credentials: CardCredentials; active?: boolean; onMissing?: () => void }) {
   const { venue, t, tf, track } = useLanding();
-  const [card, setCard] = useState<MemberCardView | null>(null);
+  // The grid's card tile may have fetched it moments ago: open with that.
+  const [card, setCard] = useState<MemberCardView | null>(() => recentCardView(credentials.cardId));
   const [failed, setFailed] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [showCode, setShowCode] = useState(false);
-  const known = useRef<number | null>(null);
+  const known = useRef<number | null>(card?.stamps ?? null);
+
+  const missing = useCallback(() => {
+    // The card was removed (or the venue reset it): stop showing it here.
+    deviceMemory.forgetCard(venue.id);
+    onMissing?.();
+  }, [venue.id, onMissing]);
+
+  // The whole card; on first open and whenever the till changed it.
+  const stopped = useRef(false);
+  useEffect(() => {
+    stopped.current = false;
+    return () => {
+      stopped.current = true;
+    };
+  }, []);
+  const load = useCallback(async () => {
+    try {
+      const next = await api.getCard(credentials.cardId, credentials.token);
+      if (stopped.current) return;
+      if (known.current !== null && next.stamps !== known.current) {
+        setToast(next.stamps > known.current ? tf("card_stamp_added", { count: next.stamps - known.current }) : t("card_reward_used"));
+        setTimeout(() => setToast(null), 4000);
+      }
+      known.current = next.stamps;
+      rememberCardView(next);
+      setCard(next);
+      setFailed(false);
+    } catch (error) {
+      if (stopped.current) return;
+      if (error instanceof ApiRequestError && error.status === 404) missing();
+      setFailed(true);
+    }
+  }, [credentials.cardId, credentials.token, t, tf, missing]);
 
   useEffect(() => {
-    if (!active) return;
-    let stopped = false;
-    async function load() {
-      if (document.visibilityState !== "visible") return;
-      try {
-        const next = await api.getCard(credentials.cardId, credentials.token);
-        if (stopped) return;
-        if (known.current !== null && next.stamps !== known.current) {
-          setToast(next.stamps > known.current ? tf("card_stamp_added", { count: next.stamps - known.current }) : t("card_reward_used"));
-          setTimeout(() => setToast(null), 4000);
-        }
-        known.current = next.stamps;
-        setCard(next);
-        setFailed(false);
-      } catch (error) {
-        if (stopped) return;
-        if (error instanceof ApiRequestError && error.status === 404) {
-          // The card was removed (or the venue reset it): stop showing it here.
-          deviceMemory.forgetCard(venue.id);
-          onMissing?.();
-        }
-        setFailed(true);
-      }
-    }
-    void load();
-    const timer = setInterval(load, POLL_MS);
-    return () => {
-      stopped = true;
-      clearInterval(timer);
-    };
-  }, [active, credentials.cardId, credentials.token, venue.id, t, tf, onMissing]);
+    if (active && !recentCardView(credentials.cardId)) void load();
+  }, [active, load, credentials.cardId]);
+
+  useCardChanges({
+    cardId: credentials.cardId,
+    token: credentials.token,
+    active,
+    knownStamps: card?.stamps ?? null,
+    onChange: () => void load(),
+    onMissing: missing,
+  });
 
   if (!card) return <p className="sub-text my-card-status">{failed ? t("card_not_found") : t("loading")}</p>;
 

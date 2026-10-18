@@ -54,11 +54,11 @@ export function TillEnrollForm({ asksBirthday, adultAge }: { asksBirthday: boole
     >
       <label className="field">
         <span>Guest&apos;s name</span>
-        <input className="input" type="text" autoComplete="off" autoCorrect="off" value={name} onChange={(event) => setName(event.target.value)} />
+        <input className="input" type="text" enterKeyHint="next" autoComplete="off" autoCorrect="off" value={name} onChange={(event) => setName(event.target.value)} />
       </label>
       <label className="field">
         <span>Email address</span>
-        <input className="input" type="email" inputMode="email" autoComplete="off" value={email} onChange={(event) => setEmail(event.target.value)} />
+        <input className="input" type="email" enterKeyHint="done" inputMode="email" autoComplete="off" value={email} onChange={(event) => setEmail(event.target.value)} />
       </label>
       {asksBirthday && (
         <div className="field">

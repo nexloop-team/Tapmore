@@ -6,6 +6,7 @@ import { safeNext } from "@/lib/safe-next";
 import { currentUser } from "@/server/auth/session";
 import { firstParam } from "@/server/request";
 
+
 export const metadata: Metadata = { title: "Sign in" };
 
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {

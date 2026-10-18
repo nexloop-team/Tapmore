@@ -1,4 +1,4 @@
-import { analyticsEvent } from "@/lib/api/contracts";
+import { analyticsBatch } from "@/lib/api/contracts";
 import { getDb } from "@/server/db";
 import { clientIp, handle, parseBody, rateLimitKeyLocal, rateLimitLocal } from "@/server/http";
 
@@ -18,20 +18,28 @@ async function venueExists(venueId: string): Promise<boolean> {
 }
 
 /**
- * First-party analytics sink for the landing page (sent with sendBeacon).
- * Anyone can post here, so it only takes events for real venues, and caps
- * what one address can add to one venue's numbers: a busy café's guests
- * share an address on its Wi-Fi, so the cap is generous, not exact.
+ * First-party analytics sink for the guest pages (sent with sendBeacon), one
+ * event or a batch tracked together, stored in one write. Anyone can post
+ * here, so it only takes events for real venues, and caps what one address
+ * can add to one venue's numbers: a busy café's guests share an address on
+ * its Wi-Fi, so the cap is generous, not exact.
  */
 export const POST = handle(async (request) => {
-  rateLimitLocal(request, "events", 240);
-  const event = await parseBody(request, analyticsEvent);
-  const venueId = typeof event.params?.venue_id === "string" ? event.params.venue_id.slice(0, 128) : null;
-  if (venueId) {
-    if (!(await venueExists(venueId))) return new Response(null, { status: 204 });
-    rateLimitKeyLocal(`events:${venueId}:${clientIp(request)}`, 600, 60 * 60_000);
-    if (event.name === "landing_opened") rateLimitKeyLocal(`scans:${venueId}:${clientIp(request)}`, 120, 60 * 60_000);
+  const { events } = await parseBody(request, analyticsBatch);
+  const ip = clientIp(request);
+  const rows: [string, string, string | null][] = [];
+  for (const event of events) {
+    rateLimitLocal(request, "events", 240);
+    const venueId = typeof event.params?.venue_id === "string" ? event.params.venue_id.slice(0, 128) : null;
+    if (venueId) {
+      if (!(await venueExists(venueId))) continue;
+      rateLimitKeyLocal(`events:${venueId}:${ip}`, 600, 60 * 60_000);
+      if (event.name === "landing_opened") rateLimitKeyLocal(`scans:${venueId}:${ip}`, 120, 60 * 60_000);
+    }
+    rows.push([event.name, JSON.stringify(event.params ?? {}), venueId]);
   }
-  (await (await getDb()).run("INSERT INTO events (name, params, venue_id) VALUES (?, ?, ?)", event.name, JSON.stringify(event.params ?? {}), venueId));
+  if (rows.length > 0) {
+    (await (await getDb()).run(`INSERT INTO events (name, params, venue_id) VALUES ${rows.map(() => "(?, ?, ?)").join(", ")}`, ...rows.flat()));
+  }
   return new Response(null, { status: 204 });
 });

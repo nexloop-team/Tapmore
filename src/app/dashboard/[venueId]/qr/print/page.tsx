@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { PrintSheets, PRINT_FORMATS, isPrintFormat, parseTables, printVenue, type PrintFormat } from "@/components/dashboard/PrintSheets";
 import { PrintButton } from "@/components/dashboard/QrDesigner";
-import { STYLE_FONT_HREF, computeTheme } from "@/lib/theme";
 import { loadDashboardVenue } from "@/server/dashboard";
 import { firstParam } from "@/server/request";
 
@@ -17,12 +16,10 @@ export default async function PrintPage({ params, searchParams }: PageProps<"/da
   const color = /^#[0-9a-fA-F]{6}$/.test(firstParam(query.color)) ? firstParam(query.color) : "#000000";
   const requested = firstParam(query.f);
   const format: PrintFormat = isPrintFormat(requested) ? requested : "a6";
-  const style = computeTheme(venue.config.branding).style;
   const href = (f: PrintFormat) => `/dashboard/${venue.id}/qr/print?${new URLSearchParams({ tables: tablesParam, color, f })}`;
 
   return (
     <>
-      {style && <link rel="stylesheet" href={STYLE_FONT_HREF[style]} precedence="default" />}
       <div className="page-head no-print">
         <div>
           <h1>Table cards</h1>

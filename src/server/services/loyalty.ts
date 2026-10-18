@@ -16,6 +16,7 @@ import { recordStampEvent } from "../repositories/stamps";
 import { friendJoinBonus } from "./retention";
 import { findVenue, getVenueSettings } from "../repositories/venues";
 import { sendMail } from "./mailer";
+import { afterResponse } from "../after";
 
 /**
  * A returning member (a new phone, a lost card) is emailed their card link
@@ -114,9 +115,14 @@ export async function enroll(input: EnrollInput, origin: string): Promise<Enroll
   });
 
   const { customer, card, wasExisting } = result;
-  const shouldEmail = !wasExisting || await passResendAllowed(card.id);
-  const passEmailed = shouldEmail && await sendCardEmail(venue, customer.email, card, origin);
-  if (passEmailed) await markPassEmailed(await getDb(), card.id);
+  // The email goes out just after the guest has their answer, so joining
+  // doesn't wait on the mail provider.
+  const passEmailed = !wasExisting || await passResendAllowed(card.id);
+  if (passEmailed) {
+    await afterResponse("card email", async () => {
+      if (await sendCardEmail(venue, customer.email, card, origin)) await markPassEmailed(await getDb(), card.id);
+    });
+  }
 
   // A returning member is sent their card again by email rather than shown
   // it here: an email address is no proof of who's typing it, and the card's

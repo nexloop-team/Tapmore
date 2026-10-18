@@ -1,7 +1,7 @@
 /**
- * The public shape of a venue as served to the customer landing page by
- * GET /api/venues/:id. Everything here is safe to show to anyone holding the
- * QR code; private merchant data never enters this type.
+ * The public shape of a venue as the guest pages receive it (rendered on
+ * the server). Everything here is safe to show to anyone holding the QR
+ * code; private merchant data never enters this type.
  */
 
 export type LinkLabelToken =

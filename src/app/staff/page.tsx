@@ -1,4 +1,5 @@
 import { ScanLine, Search, UserPlus } from "lucide-react";
+import Form from "next/form";
 import Link from "next/link";
 import { ScanCardButton } from "@/components/staff/ScanCardButton";
 import { formatSince, initials } from "@/lib/format";
@@ -60,10 +61,19 @@ export default async function StaffHome({ searchParams }: PageProps<"/staff">) {
       <div className="till-divider">
         <span>or find a member</span>
       </div>
-      <form className="till-search" action="/staff" role="search">
+      {/* Searches without a full page load. */}
+      <Form className="till-search" action="/staff" role="search">
         <Search aria-hidden />
-        <input name="q" defaultValue={q} placeholder="Name or email" aria-label="Find a member by name or email" autoComplete="off" />
-      </form>
+        <input
+          name="q"
+          type="search"
+          enterKeyHint="search"
+          defaultValue={q}
+          placeholder="Name or email"
+          aria-label="Find a member by name or email"
+          autoComplete="off"
+        />
+      </Form>
       <Link className="staff-btn staff-btn-secondary" href="/staff/new-member">
         <UserPlus aria-hidden /> Add a new member
       </Link>

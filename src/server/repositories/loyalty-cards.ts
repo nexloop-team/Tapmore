@@ -79,6 +79,22 @@ export async function findCardForViewer(cardId: string, token: string) {
   );
 }
 
+/**
+ * What a member's open card checks for while they wait at the till: the
+ * stamp count, and a marker that moves with every stamp, reward, birthday
+ * treat or undo. One indexed lookup, so polling stays cheap.
+ */
+export async function findCardState(cardId: string, token: string): Promise<{ stamps: number; version: string } | null> {
+  const row = (await (await getDb()).get(
+    `SELECT c.stamps,
+            (SELECT max(id) FROM stamp_events e WHERE e.card_id = c.id) AS last_event,
+            (SELECT count(*) FROM stamp_events e WHERE e.card_id = c.id AND e.undone_at IS NOT NULL) AS undone
+       FROM loyalty_cards c WHERE c.id = ? AND c.access_token = ?`, cardId, token)) as
+    | { stamps: number; last_event: number | string | null; undone: number | string }
+    | undefined;
+  return row ? { stamps: row.stamps, version: `${row.stamps}.${row.last_event ?? 0}.${row.undone}` } : null;
+}
+
 /** SQLite now() strings are UTC without a zone marker. */
 export function hoursSince(sqliteUtc: string | null): number {
   if (!sqliteUtc) return Infinity;

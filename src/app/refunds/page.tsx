@@ -7,6 +7,9 @@ import { legalDetails, operatedByOther } from "@/config/legal";
 import { CHARGES_GST, priceSentence, TRIAL_DAYS } from "@/lib/plans";
 import "@/styles/pages.css";
 
+// Blocks on purpose (Cache Components): the business details come from the server's settings at request time (see config/legal), so a change shows without a rebuild.
+export const instant = false;
+
 export const metadata: Metadata = { title: "Cancellation & refund policy" };
 
 /**

@@ -44,7 +44,7 @@ export interface EnrollResponse {
   customerId: string | null;
   cardId: string;
   wasExisting: boolean;
-  /** False when a returning member re-joined inside the resend cooldown. */
+  /** The card email is going out (sent just after this response). False when a returning member re-joined inside the resend cooldown. */
   passEmailed: boolean;
   /** Web version of the card, only to new members; a returning member is emailed it instead. */
   cardUrl: string | null;
@@ -128,6 +128,8 @@ export const analyticsEvent = z.object({
     .optional(),
 });
 export type AnalyticsEvent = z.input<typeof analyticsEvent>;
+/** One beacon: a single event, or several tracked together (see lib/analytics). */
+export const analyticsBatch = z.union([z.object({ events: z.array(analyticsEvent).min(1).max(20) }), analyticsEvent.transform((event) => ({ events: [event] }))]);
 
 /** A member's card, for the holder of its private link. */
 export interface MemberCardView {

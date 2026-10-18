@@ -7,7 +7,7 @@ import { HashFocus } from "@/components/dashboard/HashFocus";
 import { parseDbDate, trialDaysLeft } from "@/lib/plans";
 import { loadDashboardVenue } from "@/server/dashboard";
 import { EDIT_GRANT_MINUTES, editGrantExpiry } from "@/server/repositories/admin-actions";
-import { isManagerRole, venueRole } from "@/server/repositories/venues";
+import { isManagerRole } from "@/server/repositories/venues";
 
 export async function generateMetadata({ params }: LayoutProps<"/dashboard/[venueId]">) {
   const { venue } = await loadDashboardVenue((await params).venueId);
@@ -16,10 +16,10 @@ export async function generateMetadata({ params }: LayoutProps<"/dashboard/[venu
 
 export default async function VenueLayout({ children, params }: LayoutProps<"/dashboard/[venueId]"> & { children: ReactNode }) {
   const { venueId } = await params;
-  const { user, venue, subscription, access } = await loadDashboardVenue(venueId);
+  const { user, venue, role, subscription, access } = await loadDashboardVenue(venueId);
   const trialDays = trialDaysLeft(subscription);
   // Only operators reach a venue they aren't a member of (loadDashboardVenue 404s everyone else).
-  const operatorView = !isManagerRole(await venueRole(user.id, venue.id));
+  const operatorView = !isManagerRole(role);
 
   return (
     <div className="page">

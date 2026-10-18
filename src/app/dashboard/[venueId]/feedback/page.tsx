@@ -5,7 +5,8 @@ import { loadDashboardVenue } from "@/server/dashboard";
 import { listFeedback, type FeedbackFilter } from "@/server/repositories/insights";
 import { firstParam } from "@/server/request";
 import { markFeedbackSeen, unreadFeedback } from "@/server/repositories/feedback";
-import { RefreshOnce } from "@/components/dashboard/RefreshOnce";
+import { FeedbackSeen } from "@/components/dashboard/FeedbackSeen";
+import { afterResponse } from "@/server/after";
 
 export const metadata: Metadata = { title: "Feedback" };
 
@@ -25,20 +26,19 @@ function mood(score: number): { label: string; tone: string } {
 
 export default async function FeedbackPage({ params, searchParams }: PageProps<"/dashboard/[venueId]/feedback">) {
   const { venue, user } = await loadDashboardVenue((await params).venueId);
-  // Opening the inbox reads everything in it; the sidebar count then refreshes.
-  const hadUnread = (await unreadFeedback(venue.id, user.id)).count > 0;
-  await markFeedbackSeen(venue.id, user.id);
   const query = await searchParams;
   const filter = (FILTERS.find((f) => f.key === firstParam(query.filter))?.key ?? "all") as FeedbackFilter;
   const page = Math.max(1, Number(firstParam(query.page)) || 1);
-  const { rows, total } = await listFeedback(venue.id, { filter, limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE });
+  const [unread, { rows, total }] = await Promise.all([unreadFeedback(venue.id, user.id), listFeedback(venue.id, { filter, limit: PAGE_SIZE, offset: (page - 1) * PAGE_SIZE })]);
+  // Opening the inbox reads everything in it: recorded after the page is sent, and the sidebar's count clears on screen.
+  await afterResponse("mark feedback seen", () => markFeedbackSeen(venue.id, user.id));
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const base = `/dashboard/${venue.id}/feedback`;
   const href = (f: FeedbackFilter, p = 1) => `${base}?filter=${f}${p > 1 ? `&page=${p}` : ""}`;
 
   return (
     <>
-      <RefreshOnce when={hadUnread} />
+      <FeedbackSeen venueId={venue.id} count={unread.count} />
       <div className="page-head">
         <div>
           <h1>Feedback</h1>

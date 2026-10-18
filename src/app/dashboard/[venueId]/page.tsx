@@ -10,7 +10,7 @@ import { parseDbDate } from "@/lib/plans";
 import { venueUtcOffsetMinutes } from "@/lib/venue/region";
 import { loadDashboardVenue } from "@/server/dashboard";
 import { unreadFeedback } from "@/server/repositories/feedback";
-import { listFeedback, venueEngagement, venueStats } from "@/server/repositories/insights";
+import { listFeedback, venueEngagement, venueStats, venueTotals } from "@/server/repositories/insights";
 import { firstParam, serverOrigin } from "@/server/request";
 import { guestPageUrl } from "@/server/services/qr";
 
@@ -82,8 +82,16 @@ export default async function VenueOverview({ params, searchParams }: PageProps<
   const days = PERIODS.find((p) => String(p) === firstParam(query.days)) ?? 30;
   const config = venue.config;
   const offset = venueUtcOffsetMinutes(config.currencyCode);
-  const stats = await venueStats(venue.id, days, offset);
-  const both = await venueStats(venue.id, days * 2, offset);
+  // Everything the page shows, fetched side by side. The doubled window only
+  // feeds the "vs previous period" deltas, so it needs the totals alone.
+  const [stats, both, unread, engagement, latest] = await Promise.all([
+    venueStats(venue.id, days, offset),
+    venueTotals(venue.id, days * 2, offset),
+    unreadFeedback(venue.id, user.id),
+    venueEngagement(venue.id, days, offset),
+    listFeedback(venue.id, { limit: 3 }),
+  ]);
+  const latestFeedback = latest.rows;
   const url = guestPageUrl(await serverOrigin(), venue.shortCode);
   // Opened from here in preview mode, so the owner's own look doesn't count as a scan.
   const viewUrl = `${url}&s=preview`;
@@ -91,7 +99,6 @@ export default async function VenueOverview({ params, searchParams }: PageProps<
   const hideCookie = `tt_hide_${venue.id}`;
   const hidden = new Set(((await cookies()).get(hideCookie)?.value ?? "").split(",").filter(Boolean));
   const base = `/dashboard/${venue.id}`;
-  const unread = await unreadFeedback(venue.id, user.id);
 
   const { firstWeek, sinceDay } = venueAge(venue.createdAt);
   const googleLinked = !!config.socialLinks.google && !!config.branding.showGoogleReviewButton;
@@ -121,8 +128,6 @@ export default async function VenueOverview({ params, searchParams }: PageProps<
   // Unread feedback already shows in "Latest feedback", so this box is only for the next setup step.
   const showNext = !settingUp && !!nextStep;
 
-  const engagement = await venueEngagement(venue.id, days, offset);
-  const latestFeedback = (await listFeedback(venue.id, { limit: 3 })).rows;
   const dishNames = new Map(config.menus.flatMap((menu) => menu.sections.flatMap((section) => section.items.map((item) => [item.id, item.name] as const))));
   const topDishes = engagement.dishes.map((dish) => ({ ...dish, name: dishNames.get(dish.itemId) })).filter((dish): dish is typeof dish & { name: string } => !!dish.name);
   const featureLabel = (feature: string) => FEATURE_LABELS[feature] ?? (feature === "loyalty" ? (club ? "Members club" : "Stamp card") : feature);
@@ -154,7 +159,7 @@ export default async function VenueOverview({ params, searchParams }: PageProps<
       {firstParam(query.verified) === "1" && <div className="notice notice-ok">Your email is confirmed. Thanks!</div>}
       {firstParam(query.verified) === "0" && <div className="notice notice-error">That confirmation link has expired or was already used.</div>}
       {firstWeek && !firstParam(query.welcome) && !hidden.has("live") && (
-        <div className="live-card">
+        <div className="live-card" data-dismissible>
           <PartyPopper aria-hidden />
           <span>
             <strong>Your page is live</strong>
@@ -198,7 +203,7 @@ export default async function VenueOverview({ params, searchParams }: PageProps<
       </div>
 
       {settingUp ? (
-        <section className="card setup-card">
+        <section className="card setup-card" data-dismissible>
           <div className="setup-head">
             <h2 className="card-title">Get set up</h2>
             <span className="muted num">{`${done} of ${checklist.length} done`}</span>
@@ -448,7 +453,7 @@ export default async function VenueOverview({ params, searchParams }: PageProps<
           <div className="card-head">
             <h2>What to do next</h2>
             {nextStep && (
-              <span className="next-setup">
+              <span className="next-setup" data-dismissible>
                 Setup {done} of {checklist.length} done
                 <span className="progress small" aria-hidden>
                   <span style={{ width: `${(done / checklist.length) * 100}%` }} />

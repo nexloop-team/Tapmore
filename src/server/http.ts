@@ -1,7 +1,9 @@
 import "server-only";
+import { unstable_rethrow } from "next/navigation";
 import { createHash } from "node:crypto";
 import type { z } from "zod";
-import { getDb } from "./db";
+import { getDb, timeDb } from "./db";
+import { reportError } from "./monitoring";
 
 /** Thrown by services; routes turn it into a JSON error with this status. */
 export class ServiceError extends Error {
@@ -85,25 +87,28 @@ function countLocally(key: string, limit: number, windowMs: number) {
 }
 
 /**
- * One fixed-window counter per key in Postgres, shared by every instance
- * (Vercel runs many, each with its own memory). Keys are hashed, so emails
- * used as keys aren't stored. Returns the hits in the current window.
+ * Fixed-window counters in Postgres, shared by every instance (Vercel runs
+ * many, each with its own memory). Keys are hashed, so emails used as keys
+ * aren't stored. Several counters go up in one write; returns each one's
+ * hits in its current window, in the order given.
  */
-async function countShared(key: string, windowMs: number): Promise<number> {
+async function countShared(counters: { key: string; windowMs: number }[]): Promise<number[]> {
   const now = Date.now();
-  const windowStart = now - (now % windowMs);
-  const row = (await (await getDb()).get(
-    `INSERT INTO rate_limits (key, window_start, hits, expires_at) VALUES (?, ?, 1, ?)
+  const rows = counters.map(({ key, windowMs }) => {
+    const windowStart = now - (now % windowMs);
+    return [createHash("sha256").update(`${windowMs}:${key}`).digest("base64url"), windowStart, new Date(windowStart + windowMs).toISOString()] as const;
+  });
+  const result = (await (await getDb()).all(
+    `INSERT INTO rate_limits (key, window_start, hits, expires_at) VALUES ${rows.map(() => "(?, ?, 1, ?)").join(", ")}
      ON CONFLICT (key) DO UPDATE SET
        hits = CASE WHEN rate_limits.window_start = EXCLUDED.window_start THEN rate_limits.hits + 1 ELSE 1 END,
        window_start = EXCLUDED.window_start,
        expires_at = EXCLUDED.expires_at
-     RETURNING hits`,
-    createHash("sha256").update(`${windowMs}:${key}`).digest("base64url"),
-    windowStart,
-    new Date(windowStart + windowMs).toISOString(),
-  )) as { hits: number };
-  return row.hits;
+     RETURNING key, hits`,
+    ...rows.flat(),
+  )) as unknown as { key: string; hits: number }[];
+  const hits = new Map(result.map((row) => [row.key, row.hits]));
+  return rows.map(([key]) => hits.get(key) ?? 0);
 }
 
 /**
@@ -117,16 +122,24 @@ export async function rateLimit(request: Request, route: string, limit: number, 
 
 /** The same limiter on any key, e.g. per account email for login attempts. */
 export async function rateLimitKey(key: string, limit: number, windowMs = 60_000) {
-  countLocally(key, limit, windowMs);
-  let hits: number;
+  await rateLimitMany([{ key, limit, windowMs }]);
+}
+
+/** Several limits at once (say per minute and per day) for one database write. Keys must differ. */
+export async function rateLimitMany(limits: { key: string; limit: number; windowMs?: number }[]) {
+  const counters = limits.map(({ key, limit, windowMs = 60_000 }) => {
+    countLocally(key, limit, windowMs);
+    return { key, windowMs };
+  });
+  let hits: number[];
   try {
-    hits = await countShared(key, windowMs);
+    hits = await countShared(counters);
   } catch (error) {
-    // The local count above still applies; a database hiccup shouldn't take sign-in down with it.
+    // The local counts above still apply; a database hiccup shouldn't take sign-in down with it.
     console.error("[rate-limit] shared counter unavailable", error);
     return;
   }
-  if (hits > limit) throw new ServiceError(429, TOO_MANY);
+  if (hits.some((count, i) => count > limits[i].limit)) throw new ServiceError(429, TOO_MANY);
 }
 
 /**
@@ -137,7 +150,7 @@ export async function rateLimitKey(key: string, limit: number, windowMs = 60_000
  */
 export async function underLimit(key: string, limit: number, windowMs: number): Promise<boolean> {
   try {
-    return (await countShared(key, windowMs)) <= limit;
+    return (await countShared([{ key, windowMs }]))[0] <= limit;
   } catch (error) {
     console.error("[rate-limit] shared counter unavailable", error);
     return false;
@@ -174,12 +187,34 @@ export function assertSameOrigin(request: Request) {
 /** Wraps a handler so ServiceErrors become JSON responses and anything else a 500. */
 export function handle<C = unknown>(fn: (request: Request, ctx: C) => Promise<Response>) {
   return async (request: Request, ctx: C): Promise<Response> => {
+    const started = performance.now();
+    const timing = { ms: 0, queries: 0 };
+    let response: Response;
     try {
-      return await fn(request, ctx);
+      response = await timeDb(timing, () => fn(request, ctx));
     } catch (error) {
-      if (error instanceof ServiceError) return jsonError(error.status, error.message);
-      console.error(error);
-      return jsonError(500, "Internal error");
+      // Next's own signals (a redirect, "render this at request time") pass through untouched.
+      unstable_rethrow(error);
+      if (error instanceof ServiceError) response = jsonError(error.status, error.message);
+      else {
+        reportError(error, new URL(request.url).pathname);
+        response = jsonError(500, "Internal error");
+      }
     }
+    return withServerTiming(response, timing, performance.now() - started);
   };
+}
+
+/**
+ * Where the time went, shown in the browser's network panel: database time
+ * and query count, and the whole request. Durations only; nothing about
+ * what was asked.
+ */
+function withServerTiming(response: Response, timing: { ms: number; queries: number }, totalMs: number): Response {
+  try {
+    response.headers.append("Server-Timing", `db;dur=${timing.ms.toFixed(1)};desc="${timing.queries} quer${timing.queries === 1 ? "y" : "ies"}", total;dur=${totalMs.toFixed(1)}`);
+  } catch {
+    /* a response whose headers can't change (rare): sent as it is */
+  }
+  return response;
 }

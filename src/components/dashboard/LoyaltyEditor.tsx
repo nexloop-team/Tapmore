@@ -62,6 +62,8 @@ export function LoyaltyEditor({
   /** Staff devices and logins, rendered by the page. */
   till: ReactNode;
 }) {
+  // Compiled by the React Compiler (annotation mode, see next.config): re-renders only what an edit touches.
+  "use memo";
   const editor = useVenueDraft<Draft>(venueId, initial);
   const { draft, update } = editor;
   const program = draft.loyaltyProgram ?? null;
@@ -269,7 +271,7 @@ export function LoyaltyEditor({
 
       </div>
 
-      {mode !== "off" && <PreviewPane src={`${previewUrl}&embed=1`} version={editor.version} title="Live page preview" fullHref={previewUrl} />}
+      {mode !== "off" && <PreviewPane src={`${previewUrl}&embed=1`} title="Live page preview" fullHref={previewUrl} />}
 
       <SaveBar dirty={editor.dirty} saving={editor.saving} error={editor.error} onSave={editor.save} onReset={editor.reset} />
     </div>

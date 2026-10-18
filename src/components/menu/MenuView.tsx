@@ -2,13 +2,14 @@
 
 import { ChefHat, ChevronLeft, Flame, Info, Leaf, Menu as MenuLines, Search, Sparkles, Sprout, Star, WheatOff, X, type LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { scrollMotion } from "@/lib/browser";
 import { createTracker } from "@/lib/analytics";
 import { createTranslator, type Locale, type MessageKey } from "@/lib/i18n";
 import { usePreviewDraft } from "@/lib/live-preview";
 import { computeTheme } from "@/lib/theme";
 import { safeImageUrl } from "@/lib/venue/features";
 import type { Menu, MenuItem, VenueBranding } from "@/lib/venue/types";
-import { ALLERGENS } from "@/lib/venue/schema";
+import { ALLERGENS } from "@/lib/venue/constants";
 import { isIndianMenu, menuPriceFormat } from "@/lib/venue/region";
 import { DishSheet } from "./DishSheet";
 import { MenuBrowseSheet } from "./MenuBrowseSheet";
@@ -181,7 +182,7 @@ export function MenuView({ venueId, venueName, branding, currencyCode, menus: sa
   }
 
   function jumpTo(sectionId: string) {
-    document.getElementById(`section-${sectionId}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    document.getElementById(`section-${sectionId}`)?.scrollIntoView({ behavior: scrollMotion(), block: "start" });
     setActiveSection(sectionId);
     track("menu_section_jump", { section_id: sectionId });
   }
@@ -400,7 +401,7 @@ export function MenuView({ venueId, venueName, branding, currencyCode, menus: sa
 
             <label className="menu-search">
               <Search aria-hidden />
-              <input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("menu_search")} aria-label={t("menu_search")} />
+              <input type="search" enterKeyHint="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("menu_search")} aria-label={t("menu_search")} />
             </label>
 
             {activeFilters > 0 && (

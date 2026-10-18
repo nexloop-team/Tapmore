@@ -32,9 +32,13 @@ export async function submitFeedback(input: z.output<typeof feedbackRequest>): P
     throw new ServiceError(429, "This venue has had a lot of photos today. Please send your note without one.");
   }
   const id = newId("fbk");
-  const imagePath = input.imageBase64 ? await saveImage(id, input.imageBase64) : null;
-  const sentimentScore = await analyzeSentiment(input.text);
-  const stampToken = hasLoyaltyProgram(venue) && (await getVenueSettings(venue.id)).stampPolicy.feedbackStamp ? newToken() : null;
+  // Independent of each other, so the guest waits for the slowest, not the sum.
+  const [imagePath, sentimentScore, feedbackStamp] = await Promise.all([
+    input.imageBase64 ? saveImage(id, input.imageBase64) : null,
+    analyzeSentiment(input.text),
+    hasLoyaltyProgram(venue) ? getVenueSettings(venue.id).then((settings) => settings.stampPolicy.feedbackStamp) : false,
+  ]);
+  const stampToken = feedbackStamp ? newToken() : null;
   await insertFeedback({ id, venueId: venue.id, text: input.text, sentiment: sentimentScore, source: input.source ?? null, imagePath, stampToken });
   return { id, sentimentScore, stampReceipt: stampToken ? { feedbackId: id, token: stampToken } : null };
 }

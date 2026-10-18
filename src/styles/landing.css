@@ -102,19 +102,19 @@
   --display-tracking: -0.02em;
 }
 [data-style="classic"] {
-  --font-display: "Playfair Display", Georgia, serif;
+  --font-display: var(--font-classic), Georgia, serif;
   --fw-display: 600;
   --fw-title: 600;
   --display-tracking: -0.005em;
 }
 [data-style="editorial"] {
-  --font-display: Petrona, Georgia, serif;
+  --font-display: var(--font-editorial), Georgia, serif;
   --fw-display: 600;
   --fw-title: 600;
   --display-tracking: -0.01em;
 }
 [data-style="modern"] {
-  --font-display: Outfit, system-ui, sans-serif;
+  --font-display: var(--font-modern), system-ui, sans-serif;
   --fw-display: 600;
   --fw-title: 600;
   --display-tracking: -0.02em;
@@ -524,6 +524,32 @@
   to {
     transform: rotate(360deg);
   }
+}
+/* A sheet whose code is still downloading (see lazy-sheets). */
+.sheet-loading {
+  position: relative;
+  min-height: 120px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  text-align: center;
+  color: var(--text-secondary);
+}
+.sheet-loading .spinner {
+  border-color: color-mix(in srgb, var(--text-secondary) 25%, transparent);
+  border-top-color: var(--text-secondary);
+}
+.sheet-retry {
+  min-height: 44px;
+  padding: 0 20px;
+  border: 1px solid var(--separator);
+  border-radius: 999px;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: var(--fw-label);
 }
 .photo-hidden-input {
   /* Off-screen rather than display:none: iOS needs a real box to open the camera. */
@@ -1404,6 +1430,37 @@
   height: 72px;
   border-radius: 16px;
   background: #f4f4f4;
+}
+/* The hosted menu's placeholder: back bar, category chips, dish rows. */
+.skeleton-menu-bar {
+  height: 56px;
+  margin: 0 16px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.skeleton-chips {
+  display: flex;
+  gap: 8px;
+  padding: 14px 16px;
+  overflow: hidden;
+}
+.skeleton-chips div {
+  flex: none;
+  width: 84px;
+  height: 34px;
+  border-radius: 999px;
+  background: #f0f0f0;
+}
+.skeleton-dishes {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 12px 16px;
+}
+.skeleton-dishes div {
+  height: 64px;
+  border-radius: 12px;
+  background: linear-gradient(#ebebeb, #ebebeb) 0 4px / 55% 16px no-repeat, linear-gradient(#f2f2f2, #f2f2f2) 0 30px / 85% 12px no-repeat,
+    linear-gradient(#f2f2f2, #f2f2f2) 0 50px / 30% 12px no-repeat;
 }
 @keyframes skeleton-pulse {
   to {
@@ -3104,5 +3161,21 @@ svg.tile-glyph {
   }
   .demo-bar {
     justify-content: space-between;
+  }
+}
+
+/* Less motion, when the guest's device asks for it: every animation and
+   transition on the guest pages (sheets, fades, tiles) settles at once. */
+@media (prefers-reduced-motion: reduce) {
+  .landing *,
+  .landing *::before,
+  .landing *::after,
+  .rc-page *,
+  .rc-page *::before,
+  .rc-page *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
   }
 }

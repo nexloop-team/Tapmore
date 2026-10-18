@@ -6,7 +6,7 @@ import { cache } from "react";
 import { getDb } from "../db";
 import { ServiceError } from "../http";
 import { newToken } from "../ids";
-import { findUserById, type User } from "../repositories/users";
+import { findSessionUser, type User } from "../repositories/users";
 
 /**
  * Database sessions: the cookie holds a random token, the table holds only
@@ -14,6 +14,12 @@ import { findUserById, type User } from "../repositories/users";
  * session can be revoked by deleting its row.
  */
 const SESSION_COOKIE = "tt_session";
+/**
+ * A hint, readable by scripts, that this browser is signed in: the static
+ * home page shows "Dashboard" instead of "Sign in" from it. It proves
+ * nothing; the session cookie (HttpOnly) is what signs anyone in.
+ */
+const SIGNED_IN_HINT = "tt_signed_in";
 /** A session ends after this many days without a visit; every visit pushes the end back. */
 const SESSION_DAYS = 90;
 /** The cookie outlives the session so coming back extends it (browsers cap cookies at 400 days). */
@@ -28,13 +34,10 @@ export async function createSession(userId: string) {
   const token = newToken();
   const expires = new Date(Date.now() + SESSION_DAYS * DAY_MS);
   (await (await getDb()).run("INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)", digest(token), userId, expires.toISOString()));
-  (await cookies()).set(SESSION_COOKIE, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    expires: new Date(Date.now() + COOKIE_DAYS * DAY_MS),
-  });
+  const jar = await cookies();
+  const options = { secure: process.env.NODE_ENV === "production", sameSite: "lax" as const, path: "/", expires: new Date(Date.now() + COOKIE_DAYS * DAY_MS) };
+  jar.set(SESSION_COOKIE, token, { ...options, httpOnly: true });
+  jar.set(SIGNED_IN_HINT, "1", options);
 }
 
 async function sessionToken(): Promise<string | null> {
@@ -45,22 +48,21 @@ async function sessionToken(): Promise<string | null> {
 export const currentUser = cache(async (): Promise<User | null> => {
   const token = await sessionToken();
   if (!token) return null;
-  const row = (await (await getDb()).get("SELECT user_id, expires_at FROM sessions WHERE id = ?", digest(token))) as
-    | { user_id: string; expires_at: string }
-    | undefined;
-  if (!row || Date.parse(row.expires_at) <= Date.now()) return null;
+  const found = await findSessionUser(digest(token));
+  if (!found || Date.parse(found.expiresAt) <= Date.now()) return null;
   // Coming back keeps you signed in: slide the end forward, at most one write a day.
-  if (Date.parse(row.expires_at) < Date.now() + (SESSION_DAYS - 1) * DAY_MS) {
+  if (Date.parse(found.expiresAt) < Date.now() + (SESSION_DAYS - 1) * DAY_MS) {
     (await (await getDb()).run("UPDATE sessions SET expires_at = ? WHERE id = ?", new Date(Date.now() + SESSION_DAYS * DAY_MS).toISOString(), digest(token)));
   }
-  const user = await findUserById(row.user_id);
-  return user && !user.blocked ? user : null;
+  return found.user.blocked ? null : found.user;
 });
 
 export async function destroySession() {
   const token = await sessionToken();
   if (token) (await (await getDb()).run("DELETE FROM sessions WHERE id = ?", digest(token)));
-  (await cookies()).delete(SESSION_COOKIE);
+  const jar = await cookies();
+  jar.delete(SESSION_COOKIE);
+  jar.delete(SIGNED_IN_HINT);
 }
 
 /** After a password change or reset: every other device has to sign in again. */

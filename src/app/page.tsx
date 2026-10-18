@@ -1,13 +1,15 @@
-import { ArrowRight, BookOpen, Check, Heart, MessageCircle, Palette, Printer, Star, Users, Wifi } from "lucide-react";
+import { BookOpen, Check, Heart, MessageCircle, Palette, Printer, Star, Users, Wifi } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { BrandMark } from "@/components/icons";
 import { BRAND } from "@/config/brand";
 import { BILLING_PERIOD, formatInr, gstNote, PLAN_FEATURES, PRICE_INR, priceSentence, TRIAL_DAYS } from "@/lib/plans";
 import { isLightColor } from "@/lib/theme";
-import { currentUser } from "@/server/auth/session";
 import { uiFont } from "@/app/fonts";
 import { DEMO_VENUES } from "@/server/seed";
+import { HeroDemo } from "@/components/HeroDemo";
+import { Year } from "@/components/Year";
+import { NavActions, StartLink } from "@/components/HomeLinks";
 import "@/styles/app.css";
 
 /** The share preview and install manifest belong to our own site; venues' guest pages carry none of our branding. */
@@ -70,9 +72,8 @@ const FAQS = [
   },
 ];
 
-export default async function Home() {
-  const user = await currentUser();
-  const startHref = user ? "/dashboard" : "/signup";
+/** Static: the same HTML for everyone, served from the CDN; the signed-in bits are a client island (HomeLinks). */
+export default function Home() {
   return (
     <div className={`app mk ${uiFont.variable}`}>
       <header className="site-nav">
@@ -82,18 +83,7 @@ export default async function Home() {
         </Link>
         <nav aria-label="Main">
           <a href="#pricing">Pricing</a>
-          {user ? (
-            <Link className="mk-btn mk-btn-ink" href="/dashboard">
-              Dashboard
-            </Link>
-          ) : (
-            <>
-              <Link href="/login">Sign in</Link>
-              <Link className="mk-btn mk-btn-ink" href="/signup">
-                Start free trial
-              </Link>
-            </>
-          )}
+          <NavActions />
         </nav>
       </header>
 
@@ -106,9 +96,7 @@ export default async function Home() {
             <h1>One QR code for everything your guests need at the table.</h1>
             <p className="lede">Your menu, the Wi-Fi password, a stamp card and a private feedback box, on one page that looks like your place. Set it up yourself in ten minutes.</p>
             <div className="cta">
-              <Link className="mk-btn mk-btn-lg mk-btn-accent" href={startHref}>
-                {user ? "Go to your dashboard" : "Start your free trial"} <ArrowRight aria-hidden />
-              </Link>
+              <StartLink className="mk-btn mk-btn-lg mk-btn-accent" />
               <a className="mk-btn mk-btn-lg mk-btn-outline" href="#demos">
                 See live examples
               </a>
@@ -127,9 +115,7 @@ export default async function Home() {
           </div>
           <div className="hero-visual" aria-hidden>
             <div className="phone">
-              <div className="phone-screen">
-                <iframe src="/s?i=demo&s=home&embed=1" title="Example venue page" loading="lazy" tabIndex={-1} />
-              </div>
+              <HeroDemo />
             </div>
             <div className="hero-chip hero-chip-wifi">
               <span className="hero-chip-icon ok">
@@ -225,7 +211,8 @@ export default async function Home() {
                     </li>
                   ))}
                 </ul>
-                <Link className="mk-btn mk-btn-lg mk-btn-light" href={startHref}>
+                {/* Signed in already? /signup sends them on to their dashboard. */}
+                <Link className="mk-btn mk-btn-lg mk-btn-light" href="/signup">
                   Start your free trial
                 </Link>
               </section>
@@ -278,16 +265,14 @@ export default async function Home() {
           <p>
             {TRIAL_DAYS} days free, no card needed. {formatInr(PRICE_INR)} a year after that.
           </p>
-          <Link className="mk-btn mk-btn-lg mk-btn-light" href={startHref}>
-            {user ? "Go to your dashboard" : "Start your free trial"} <ArrowRight aria-hidden />
-          </Link>
+          <StartLink className="mk-btn mk-btn-lg mk-btn-light" />
         </section>
       </main>
 
       <footer className="site-footer">
         <div className="mk-wrap">
           <span>
-            © {new Date().getFullYear()} {BRAND.name} · Made for independent hospitality
+            © <Year /> {BRAND.name} · Made for independent hospitality
           </span>
           <nav aria-label="Footer">
             <Link href="/about">About</Link>

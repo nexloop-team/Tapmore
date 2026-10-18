@@ -235,9 +235,3 @@ export function themeCss(theme: Theme): string {
   return `:root{${declarations.join(";")}}`;
 }
 
-/** Google Fonts stylesheet per style preset; the default style loads nothing. */
-export const STYLE_FONT_HREF: Record<LandingStyle, string> = {
-  classic: "https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&display=swap",
-  editorial: "https://fonts.googleapis.com/css2?family=Petrona:wght@400;500;600;700&display=swap",
-  modern: "https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap",
-};

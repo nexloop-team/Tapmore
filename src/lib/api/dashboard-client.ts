@@ -16,6 +16,7 @@ import type {
   UpdateAccountRequest,
   UpdateVenueRequest,
 } from "./account-contracts";
+import { shrinkPhotoForUpload } from "../browser";
 import { ApiRequestError } from "./client";
 import type {
   AddStaffDeviceRequest,
@@ -57,7 +58,8 @@ interface SavedVenue {
 
 export const dashboardApi = {
   signup: (body: SignupRequest) => send<{ ok: true }>("POST", "/api/auth/signup", body),
-  login: (body: LoginRequest) => send<{ ok: true }>("POST", "/api/auth/login", body),
+  /** `home`: where this user's dashboard starts (their last or only venue). */
+  login: (body: LoginRequest) => send<{ ok: true; home: string }>("POST", "/api/auth/login", body),
   logout: () => send<{ ok: true }>("POST", "/api/auth/logout"),
   forgotPassword: (body: ForgotPasswordRequest) => send<{ ok: true }>("POST", "/api/auth/forgot", body),
   resetPassword: (body: ResetPasswordRequest) => send<{ ok: true }>("POST", "/api/auth/reset", body),
@@ -78,9 +80,11 @@ export const dashboardApi = {
   confirmPayment: (venueId: string, body: ConfirmPaymentRequest) => send<{ ok: true }>("POST", `/api/dashboard/venues/${venueId}/billing/confirm`, body),
   cancelSubscription: (venueId: string) => send<{ ok: true }>("POST", `/api/dashboard/venues/${venueId}/billing/cancel`),
 
-  async uploadImage(venueId: string, file: File): Promise<string> {
+  /** `kind` sets the size the server stores it at (see services/media). */
+  async uploadImage(venueId: string, file: File, kind: "logo" | "cover" | "dish"): Promise<string> {
     const form = new FormData();
-    form.append("file", file);
+    form.append("file", await shrinkPhotoForUpload(file));
+    form.append("kind", kind);
     const response = await fetch(`/api/dashboard/venues/${venueId}/media`, { method: "POST", body: form, signal: AbortSignal.timeout(60_000) }).catch(() => {
       throw new ApiRequestError(0, "Upload failed. Check your connection and try again.");
     });
@@ -115,6 +119,7 @@ export const dashboardApi = {
 
   deleteGuest: (venueId: string, customerId: string) => send<{ ok: true }>("DELETE", `/api/dashboard/venues/${venueId}/guests/${encodeURIComponent(customerId)}`),
   updateSettings: (venueId: string, body: VenueSettingsPatch) => send<VenueSettings>("PATCH", `/api/dashboard/venues/${venueId}/settings`, body),
+  staffCard: (cardId: string) => send<StaffCardView>("GET", `/api/staff/card?c=${encodeURIComponent(cardId)}`),
   staffStamp: (body: StaffStampRequest) => send<StaffCardView>("POST", "/api/staff/stamp", body),
   staffRedeem: (body: StaffRedeemRequest) => send<StaffCardView>("POST", "/api/staff/redeem", body),
   staffUndo: (body: StaffUndoRequest) => send<StaffCardView>("POST", "/api/staff/undo", body),

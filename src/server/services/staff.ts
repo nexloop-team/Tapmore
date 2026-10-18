@@ -7,11 +7,12 @@ import { isPlausibleEmail, isValidBirthday, maskEmail, normaliseEmail } from "@/
 import { programTiers, stampGoal } from "@/lib/venue/loyalty";
 import { birthdayAskOn, hasLoyaltyProgram } from "@/lib/venue/features";
 import type { PublicVenue } from "@/lib/venue/types";
+import { afterResponse } from "../after";
 import { getDb, transaction } from "../db";
 import { ServiceError } from "../http";
 import { newToken } from "../ids";
 import { findCardById, lockCard, setCardStamps, type LoyaltyCardRow } from "../repositories/loyalty-cards";
-import { lastStaffStampAt, lastUndoableEvent, markUndone, recordStampEvent } from "../repositories/stamps";
+import { lastStaffStampAt, lastUndoableEvent, markUndone, recordStampEvent, requestAlreadyDone } from "../repositories/stamps";
 import { findVenue, getVenueSettings } from "../repositories/venues";
 import { onStaffStamp } from "./retention";
 import { parseDbDate } from "@/lib/plans";
@@ -132,8 +133,9 @@ async function requireCard(device: StaffDevice, cardId: string, lock = false): P
   return card;
 }
 
+/** "Last used" on the owner's device list: bookkeeping, so the till doesn't wait for it. */
 async function touchDevice(deviceId: string) {
-  (await (await getDb()).run("UPDATE staff_devices SET last_used_at = now() WHERE id = ?", deviceId));
+  await afterResponse("staff device last used", async () => (await getDb()).run("UPDATE staff_devices SET last_used_at = now() WHERE id = ?", deviceId));
 }
 
 export async function viewCard(device: StaffDevice, cardId: string): Promise<StaffCardView> {
@@ -179,14 +181,17 @@ async function cooldownMinutesLeft(venueId: string, cardId: string): Promise<num
 /**
  * Adds stamps, capped at the top reward. Inside the cooldown it refuses with
  * 409 so the till can ask "add another anyway?" and retry with `force`.
+ * A `requestId` this till already used is a resend: the card is shown as it
+ * is, nothing is added again.
  */
-export async function stampCard(device: StaffDevice, cardId: string, count: number, force: boolean): Promise<StaffCardView> {
+export async function stampCard(device: StaffDevice, cardId: string, count: number, force: boolean, requestId?: string): Promise<StaffCardView> {
   const venue = await stampVenue(device);
   const goal = stampGoal(programTiers(venue.loyaltyProgram));
   const requested = Math.min(Math.max(1, Math.floor(count)), MAX_STAMPS_PER_ACTION);
-  const { before, after } = await transaction(async (db) => {
-    // Locked first, so a double tap waits here and then sees the cooldown.
+  const done = await transaction(async (db) => {
+    // Locked first, so a double tap (or a resend) waits here and then sees the cooldown, or that it's done.
     const card = await requireCard(device, cardId, true);
+    if (await requestAlreadyDone(db, device.id, requestId)) return null;
     if (!force) {
       const minutesAgo = await cooldownMinutesLeft(device.venueId, cardId);
       if (minutesAgo !== null) throw new ServiceError(409, `This card was stamped ${minutesAgo === 0 ? "just now" : `${minutesAgo} min ago`}. Add another anyway?`);
@@ -194,23 +199,27 @@ export async function stampCard(device: StaffDevice, cardId: string, count: numb
     const next = Math.min(card.stamps + requested, goal);
     if (next === card.stamps) throw new ServiceError(400, "This card is full. Redeem the reward first.");
     await setCardStamps(db, card.id, next);
-    await recordStampEvent(db, { venueId: device.venueId, cardId: card.id, kind: "stamp", delta: next - card.stamps, deviceId: device.id });
+    await recordStampEvent(db, { venueId: device.venueId, cardId: card.id, kind: "stamp", delta: next - card.stamps, deviceId: device.id, requestId });
     return { before: card.stamps, after: next };
   });
+  if (!done) return await viewCard(device, cardId);
+  const { before, after } = done;
   await touchDevice(device.id);
-  await onStaffStamp({ venue, cardId, before, after });
+  // The "reward ready" email and referral stamps go out after the till has its answer.
+  await afterResponse("after staff stamp", () => onStaffStamp({ venue, cardId, before, after }));
   return await viewCard(device, cardId);
 }
 
-export async function redeemReward(device: StaffDevice, cardId: string, tierIndex: number): Promise<StaffCardView> {
+export async function redeemReward(device: StaffDevice, cardId: string, tierIndex: number, requestId?: string): Promise<StaffCardView> {
   const venue = await stampVenue(device);
   const tier = programTiers(venue.loyaltyProgram)[tierIndex];
   if (!tier) throw new ServiceError(400, "That reward doesn't exist any more. Refresh and try again.");
   await transaction(async (db) => {
     const card = await requireCard(device, cardId, true);
+    if (await requestAlreadyDone(db, device.id, requestId)) return;
     if (card.stamps < tier.stampsRequired) throw new ServiceError(400, `Not enough stamps for ${tier.rewardName} yet`);
     await setCardStamps(db, card.id, card.stamps - tier.stampsRequired);
-    await recordStampEvent(db, { venueId: device.venueId, cardId: card.id, kind: "redeem", delta: -tier.stampsRequired, rewardName: tier.rewardName, deviceId: device.id });
+    await recordStampEvent(db, { venueId: device.venueId, cardId: card.id, kind: "redeem", delta: -tier.stampsRequired, rewardName: tier.rewardName, deviceId: device.id, requestId });
   });
   await touchDevice(device.id);
   return await viewCard(device, cardId);
@@ -262,17 +271,18 @@ export async function giveBirthdayReward(device: StaffDevice, cardId: string): P
 }
 
 /** Reverses the last stamp, redemption or birthday reward on this card, if made in the last few minutes. */
-export async function undoLast(device: StaffDevice, cardId: string): Promise<StaffCardView> {
+export async function undoLast(device: StaffDevice, cardId: string, requestId?: string): Promise<StaffCardView> {
   const venue = await stampVenue(device);
   const goal = stampGoal(programTiers(venue.loyaltyProgram));
   await transaction(async (db) => {
     const card = await requireCard(device, cardId, true);
+    if (await requestAlreadyDone(db, device.id, requestId)) return;
     const event = await lastUndoableEvent(db, card.id, UNDO_MINUTES);
     if (!event) throw new ServiceError(400, `Nothing to undo. Only the last ${UNDO_MINUTES} minutes can be undone.`);
     const next = Math.min(Math.max(card.stamps - event.delta, 0), Math.max(goal, card.stamps));
     await setCardStamps(db, card.id, next);
     await markUndone(db, event.id);
-    await recordStampEvent(db, { venueId: device.venueId, cardId: card.id, kind: "undo", delta: next - card.stamps, rewardName: event.reward_name, deviceId: device.id });
+    await recordStampEvent(db, { venueId: device.venueId, cardId: card.id, kind: "undo", delta: next - card.stamps, rewardName: event.reward_name, deviceId: device.id, requestId });
   });
   await touchDevice(device.id);
   return await viewCard(device, cardId);

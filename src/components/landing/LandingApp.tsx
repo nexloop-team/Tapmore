@@ -4,12 +4,12 @@ import { Megaphone } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from "react";
 import { createTracker } from "@/lib/analytics";
-import { deviceMemory, parseCardCredentials, subscribeStorage, type CardCredentials } from "@/lib/browser";
+import { deviceMemory, parseCardCredentials, scrollMotion, subscribeStorage, type CardCredentials } from "@/lib/browser";
 import { createTranslator, type Locale } from "@/lib/i18n";
 import { linkLabel } from "@/lib/landing-copy";
 import { rememberReferral } from "@/lib/referral";
 import { usePreviewDraft } from "@/lib/live-preview";
-import { computeTheme, STYLE_FONT_HREF } from "@/lib/theme";
+import { computeTheme } from "@/lib/theme";
 import {
   buildFeatures,
   customFeatureLabel,
@@ -27,17 +27,12 @@ import { FeatureGlyphs, FilledHeart, GoogleG, LINK_ICON_TOKENS, LinkIconGlyph, M
 import { AppDialog } from "./AppDialog";
 import { ActionCard, ExpandableCard, LinkCard, useSheet, type TileSpec } from "./FeatureCard";
 import { FeedbackTile, LinkTile, LoyaltyTile, MenuTile, ReviewTile, SudokuTile, tileSizes, useWifiCopy, WifiTile } from "./tiles";
-import { MyCard } from "./loyalty/MyCard";
 import { useKnownGuestWifi } from "./wifi/useKnownGuestWifi";
-import { FEEDBACK_TEXTAREA_ID, FeedbackSheet } from "./feedback/FeedbackSheet";
-import { LandingContext, useLanding, type DialogContent, type LandingSession, type Membership } from "./LandingContext";
-import { LoyaltySheet } from "./loyalty/LoyaltySheet";
-import { RewardsSheet } from "./loyalty/RewardsJoinForm";
+import { FEEDBACK_TEXTAREA_ID, LandingContext, useLanding, type DialogContent, type LandingSession, type Membership } from "./LandingContext";
+import { FeedbackSheet, LoyaltySheet, MyCard, preloadSheetsWhenIdle, RewardsSheet, SudokuSheet, WifiSheet } from "./lazy-sheets";
 import { SocialLinks } from "./SocialLinks";
-import { SudokuSheet } from "./sudoku/SudokuSheet";
 import { useGoogleReview } from "./useGoogleReview";
 import { VenueHeader } from "./VenueHeader";
-import { WifiSheet } from "./wifi/WifiSheet";
 
 export type FeedbackVariant = "box" | "anon";
 
@@ -58,14 +53,20 @@ function focusFeedbackKeepingKeyboard() {
   Object.assign(temp.style, { position: "fixed", top: "0", left: "0", width: "0", height: "0", opacity: "0", border: "0", padding: "0", fontSize: "16px" });
   document.body.appendChild(temp);
   temp.focus({ preventScroll: true });
-  setTimeout(() => {
+  // The sheet's code may still be on its way on a slow connection: keep looking for a few seconds.
+  const started = Date.now();
+  const handOver = () => {
     const area = document.getElementById(FEEDBACK_TEXTAREA_ID);
     if (area) {
       area.focus({ preventScroll: true });
-      area.scrollIntoView({ behavior: "smooth", block: "center" });
+      area.scrollIntoView({ behavior: scrollMotion(), block: "center" });
+    } else if (Date.now() - started < 4000) {
+      setTimeout(handOver, 150);
+      return;
     }
     temp.remove();
-  }, 500);
+  };
+  setTimeout(handOver, 500);
 }
 
 /** "2026-10-12" → "12 Oct" in the guest's language. */
@@ -124,6 +125,26 @@ function FeatureList({ features }: { features: FeatureKey[] }) {
   const sizes = useMemo(() => (bento ? tileSizes(features) : {}), [bento, features]);
   const tile = (feature: string, tone: TileSpec["tone"], content: ReactNode): TileSpec | undefined => (bento ? { tone, size: sizes[feature] ?? "small", content } : undefined);
 
+  // The sheets' code arrives after the page; fetch the ones this page shows while the phone is idle.
+  const hasCard = !!storedCard && !isRewardsOnly(venue);
+  useEffect(() => {
+    const sheets = features.flatMap((feature) => {
+      if (feature === "loyalty") return [hasCard ? MyCard : isRewardsOnly(venue) ? RewardsSheet : LoyaltySheet];
+      if (feature === "wifi") return [WifiSheet];
+      if (feature === "feedback") return [FeedbackSheet];
+      return [];
+    });
+    // The puzzle is the least likely to be opened, so it comes last.
+    if (features.includes("sudoku")) sheets.push(SudokuSheet);
+    return preloadSheetsWhenIdle(sheets);
+  }, [features, hasCard, venue]);
+
+  // The hosted menu is the most-tapped card: fetch its code and loading screen ahead, so the tap answers at once.
+  const hostedMenu = features.includes("menu") && !sanitiseExternalUrl(menuExternalUrl(venue));
+  useEffect(() => {
+    if (hostedMenu) router.prefetch(`/menu${window.location.search}`);
+  }, [hostedMenu, router]);
+
   return (
     <div className={`feature-grid${bento ? " bento" : ""}`}>
       {features.map((feature, position) => {
@@ -140,7 +161,7 @@ function FeatureList({ features }: { features: FeatureKey[] }) {
                   icon={<FilledHeart />}
                   tint={TINT.loyalty}
                   tile={tile(feature, "hero", <LoyaltyTile label={t("feature_my_card")} credentials={storedCard} />)}
-                  lazy
+                  onIntent={MyCard.preload}
                   onToggle={(open) => {
                     if (open) tapped();
                   }}
@@ -158,6 +179,7 @@ function FeatureList({ features }: { features: FeatureKey[] }) {
                 icon={<FilledHeart />}
                 tint={TINT.loyalty}
                 tile={tile(feature, "hero", <LoyaltyTile label={loyaltyLabel} credentials={null} />)}
+                onIntent={isRewardsOnly(venue) ? RewardsSheet.preload : LoyaltySheet.preload}
                 onToggle={(open) => {
                   if (!open) return;
                   tapped();
@@ -226,6 +248,7 @@ function FeatureList({ features }: { features: FeatureKey[] }) {
                 icon={<FeatureGlyphs.wifi aria-hidden strokeWidth={2} />}
                 tint={TINT.wifi}
                 tile={tile(feature, "pop", <WifiTile label={wifiLabel} status={t("tile_wifi_connect")} />)}
+                onIntent={WifiSheet.preload}
                 onToggle={(open) => open && tapped()}
               >
                 <WifiSheet />
@@ -242,7 +265,7 @@ function FeatureList({ features }: { features: FeatureKey[] }) {
                 icon={<FeatureGlyphs.sudoku aria-hidden strokeWidth={2} />}
                 tint={theme.isLightCards ? "#7D59D9" : "#B79BFF"}
                 tile={tile(feature, "pale", <SudokuTile label={customFeatureLabel(venue, "sudoku") ?? t("tile_sudoku")} />)}
-                lazy
+                onIntent={SudokuSheet.preload}
                 onToggle={(open) => open && tapped()}
               >
                 <SudokuSheet />
@@ -260,6 +283,7 @@ function FeatureList({ features }: { features: FeatureKey[] }) {
                 icon={<Glyph aria-hidden strokeWidth={2} />}
                 tint={theme.accentBlue}
                 tile={tile(feature, "pale", <FeedbackTile label={feedbackLabel} />)}
+                onIntent={FeedbackSheet.preload}
                 onToggle={(open) => {
                   if (!open) return;
                   focusFeedbackKeepingKeyboard();
@@ -348,13 +372,6 @@ export function LandingApp({ venue: savedVenue, locale, source, feedbackVariant,
     if (!draft) return;
     const root = document.documentElement;
     for (const [name, value] of Object.entries(theme.vars)) root.style.setProperty(name, value);
-    if (theme.style && !document.querySelector(`link[data-preview-font="${theme.style}"]`)) {
-      const link = document.createElement("link");
-      link.rel = "stylesheet";
-      link.href = STYLE_FONT_HREF[theme.style];
-      link.dataset.previewFont = theme.style;
-      document.head.appendChild(link);
-    }
   }, [draft, theme]);
   const features = useMemo(() => buildFeatures(venue), [venue]);
 

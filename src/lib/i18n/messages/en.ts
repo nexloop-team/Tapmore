@@ -42,7 +42,7 @@ export const en = {
   please_enter_details: "Please enter your name and a valid email address.",
   youre_enrolled: "You're in!",
   already_enrolled: "You're already a member of this program!",
-  pass_sent_to: "We've sent your card to {email} - check your inbox and spam folder.",
+  pass_sent_to: "Your card is on its way to {email} - check your inbox and spam folder.",
   pass_not_emailed: "We couldn't email your card - ask the team to resend it.",
   pass_recently_sent: "We've already emailed your card to {email} a few times recently - check your inbox and spam folder.",
   view_card: "View my card",

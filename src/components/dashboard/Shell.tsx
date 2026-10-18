@@ -9,6 +9,7 @@ import { BRAND } from "@/config/brand";
 import { dashboardApi } from "@/lib/api/dashboard-client";
 import { initials } from "@/lib/format";
 import { ConfirmProvider } from "./confirm";
+import { forgetReadInbox, useReadInboxes } from "./FeedbackSeen";
 import { ToastProvider } from "./toast";
 
 interface ShellVenue {
@@ -205,6 +206,18 @@ export function AppShell({
 }) {
   const pathname = usePathname();
   const params = useParams<{ venueId?: string }>();
+  // An inbox read since the server last counted shows 0 here, unless more notes
+  // than were read have come in since. Once the server's count reads 0 there's
+  // nothing left to hide.
+  const readInboxes = useReadInboxes();
+  useEffect(() => {
+    for (const venue of venues) if (venue.unreadFeedback === 0) forgetReadInbox(venue.id);
+  }, [venues]);
+  const unreadFor = (id: string) => {
+    const count = venues.find((v) => v.id === id)?.unreadFeedback;
+    const read = readInboxes[id];
+    return count !== undefined && read !== undefined && count <= read ? 0 : count;
+  };
   // Remembering which path the drawer was opened on closes it on navigation without an effect.
   const [openOn, setOpenOn] = useState<string | null>(null);
   const open = openOn === pathname;
@@ -235,7 +248,7 @@ export function AppShell({
     mode === "admin"
       ? ADMIN_NAV.map((group) => ({ ...group, items: group.items.map((item) => (counts?.[item.href] !== undefined ? { ...item, total: counts[item.href] } : item)) }))
       : venueId
-        ? venueNav(`/dashboard/${venueId}`, venues.find((v) => v.id === venueId)?.unreadFeedback)
+        ? venueNav(`/dashboard/${venueId}`, unreadFor(venueId))
         : [
             {
               label: "Your venues",

@@ -52,10 +52,10 @@ export function RewardsJoinForm({ door, withBirthday }: { door: "home" | "feedba
         }}
       >
         <Field label={t("first_name")}>
-          <input className="text-input" type="text" autoComplete="given-name" autoCorrect="off" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
+          <input className="text-input" type="text" autoComplete="given-name" enterKeyHint="next" autoCorrect="off" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
         </Field>
         <Field label={t("email_address")}>
-          <input className="text-input" type="email" autoComplete="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          <input className="text-input" type="email" autoComplete="email" enterKeyHint="done" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} />
         </Field>
         {showBirthday && (
           <div className="birthday-block">

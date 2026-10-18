@@ -25,7 +25,7 @@ interface UserRow {
   created_at: string;
 }
 
-function toUser(row: UserRow): User {
+function toUser(row: Omit<UserRow, "password_hash">): User {
   return {
     id: row.id,
     email: row.email,
@@ -40,6 +40,16 @@ function toUser(row: UserRow): User {
 export async function findUserById(id: string): Promise<User | null> {
   const row = (await (await getDb()).get("SELECT * FROM users WHERE id = ?", id)) as UserRow | undefined;
   return row ? toUser(row) : null;
+}
+
+/** A session's user and when the session ends, in one round trip (never the password hash). */
+export async function findSessionUser(sessionId: string): Promise<{ user: User; expiresAt: string } | null> {
+  const row = (await (await getDb()).get(
+    `SELECT s.expires_at AS session_expires_at, u.id, u.email, u.name, u.email_verified_at, u.blocked_at, u.is_admin, u.created_at
+     FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.id = ?`,
+    sessionId,
+  )) as (Omit<UserRow, "password_hash"> & { session_expires_at: string }) | undefined;
+  return row ? { user: toUser(row), expiresAt: row.session_expires_at } : null;
 }
 
 /** Includes the hash: only the login and password-change paths need it. */

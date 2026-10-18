@@ -2,7 +2,7 @@ import "server-only";
 import { AsyncLocalStorage } from "node:async_hooks";
 import fs from "node:fs";
 import path from "node:path";
-import { seedDemoVenues } from "./seed";
+import { DEMO_SEED_VERSION, seedDemoVenues } from "./seed";
 
 /**
  * PostgreSQL, through one small interface the repositories use.
@@ -304,6 +304,18 @@ const MIGRATIONS: string[] = [
    DROP TABLE IF EXISTS notification_prefs;`,
   // Joining is agreeing to the membership and its emails: when, for the record.
   `ALTER TABLE customers ADD COLUMN membership_agreed_at TIMESTAMPTZ;`,
+  // Lookups that scanned whole tables: a guest's visits (the guest list, per
+  // row), a venue's cards (stats, the till's search, the daily jobs), consent
+  // links, Razorpay's webhook, and a user's pending tokens.
+  `CREATE INDEX IF NOT EXISTS visits_customer ON visits(customer_id, created_at);
+   CREATE INDEX IF NOT EXISTS loyalty_cards_venue ON loyalty_cards(venue_id);
+   CREATE INDEX IF NOT EXISTS customers_consent_token ON customers(consent_token) WHERE consent_token IS NOT NULL;
+   CREATE INDEX IF NOT EXISTS subscriptions_provider ON subscriptions(provider_subscription_id) WHERE provider_subscription_id IS NOT NULL;
+   CREATE INDEX IF NOT EXISTS auth_tokens_user ON auth_tokens(user_id, purpose);`,
+  // A till action sent again (it was queued offline, or the answer got lost)
+  // carries the same request id, and is recognised as done rather than repeated.
+  `ALTER TABLE stamp_events ADD COLUMN request_id TEXT;
+   CREATE UNIQUE INDEX stamp_events_request ON stamp_events(device_id, request_id) WHERE request_id IS NOT NULL;`,
 ];
 
 /** "2026-10-09 13:05:00.123+00" → "2026-10-09T13:05:00.123Z": ISO in UTC, so Date.parse reads it right anywhere. */
@@ -350,7 +362,26 @@ function normalise(params: unknown[]): unknown[] {
 
 type Query = (sql: string, params: unknown[]) => Promise<{ rows: unknown[]; changes: number }>;
 
-function wrap(query: Query, execMany: (sql: string) => Promise<void>): Db {
+/** Database time within one API request, for its Server-Timing header (see http.ts handle). */
+const dbTiming = new AsyncLocalStorage<{ ms: number; queries: number }>();
+
+/** Runs `fn`, adding up the time its queries spend in the database. */
+export function timeDb<T>(timing: { ms: number; queries: number }, fn: () => Promise<T>): Promise<T> {
+  return dbTiming.run(timing, fn);
+}
+
+function wrap(rawQuery: Query, execMany: (sql: string) => Promise<void>): Db {
+  const query: Query = async (sql, params) => {
+    const timing = dbTiming.getStore();
+    if (!timing) return rawQuery(sql, params);
+    const started = performance.now();
+    try {
+      return await rawQuery(sql, params);
+    } finally {
+      timing.ms += performance.now() - started;
+      timing.queries += 1;
+    }
+  };
   return {
     async all<T>(sql: string, ...params: unknown[]) {
       return (await query(numberPlaceholders(sql), normalise(params))).rows as T[];
@@ -394,12 +425,18 @@ async function pgDriver(url: string): Promise<Driver> {
     // its own pool, so each keeps just a couple of connections; a single
     // server can keep more. Point serverless at a transaction pooler.
     max: Number(process.env.DATABASE_POOL_SIZE || (process.env.VERCEL ? 2 : 5)),
-    idleTimeoutMillis: process.env.VERCEL ? 5_000 : 10_000,
+    // A warm copy keeps its connection for the next scan rather than paying
+    // the TLS and pooler handshake again (on Vercel, attachDatabasePool below
+    // closes idle ones before the copy is suspended).
+    idleTimeoutMillis: 30_000,
+    // Fail fast rather than leave a guest's page hanging on an unreachable database.
+    connectionTimeoutMillis: 5_000,
     allowExitOnIdle: true,
     // Hosted Postgres (Supabase and most others) needs TLS; set DATABASE_SSL=off for a local server.
     ssl: databaseSsl(url) || undefined,
     types,
   });
+  if (process.env.VERCEL) (await import("@vercel/functions")).attachDatabasePool(pool);
   const onClient = (client: { query: (text: string, values?: unknown[]) => Promise<{ rows: unknown[]; rowCount: number | null }> }): Db =>
     wrap(
       async (sql, params) => {
@@ -480,11 +517,30 @@ declare global {
   var __appDriverMigrations: number | undefined;
 }
 
+/**
+ * One round trip that usually ends a cold start's setup: the schema is
+ * current and this version of the demos is already in. Anything else
+ * (a fresh database, a new migration, new demo content) takes the full path.
+ */
+async function upToDate(db: Db): Promise<boolean> {
+  try {
+    const row = await db.get<{ version: number | null; seeded: boolean }>(
+      "SELECT (SELECT max(version) FROM schema_version) AS version, EXISTS (SELECT 1 FROM job_runs WHERE job = 'demo-seed' AND key = ?) AS seeded",
+      DEMO_SEED_VERSION,
+    );
+    return row?.version === MIGRATIONS.length && !!row.seeded;
+  } catch {
+    return false; // no tables yet
+  }
+}
+
 async function open(): Promise<Driver> {
   const url = process.env.DATABASE_URL;
   const driver = url ? await pgDriver(url) : await pgliteDriver();
-  await migrate(driver);
-  await seedDemoVenues(driver.db);
+  if (!(await upToDate(driver.db))) {
+    await migrate(driver);
+    await seedDemoVenues(driver.db);
+  }
   return driver;
 }
 

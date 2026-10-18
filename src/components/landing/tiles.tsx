@@ -6,6 +6,7 @@ import { api } from "@/lib/api/client";
 import type { MemberCardView } from "@/lib/api/contracts";
 import { copyToClipboard, type CardCredentials } from "@/lib/browser";
 import { isRewardsOnly, wifiGateActive, wifiView } from "@/lib/venue/features";
+import { recentCardView, rememberCardView } from "../card/card-cache";
 import { useLanding } from "./LandingContext";
 
 /**
@@ -38,13 +39,17 @@ function Segments({ filled, total }: { filled: number; total: number }) {
 
 /** The member's stamps for the tile; one fetch, the sheet keeps it live. */
 function useCardSummary(credentials: CardCredentials | null): MemberCardView | null {
-  const [card, setCard] = useState<MemberCardView | null>(null);
+  const [card, setCard] = useState<MemberCardView | null>(() => (credentials ? recentCardView(credentials.cardId) : null));
   useEffect(() => {
     if (!credentials) return;
     let stopped = false;
+    // Shared with the card sheet (card-cache), so opening it needs no second request.
     api
       .getCard(credentials.cardId, credentials.token)
-      .then((next) => !stopped && setCard(next))
+      .then((next) => {
+        rememberCardView(next);
+        if (!stopped) setCard(next);
+      })
       .catch(() => {});
     return () => {
       stopped = true;

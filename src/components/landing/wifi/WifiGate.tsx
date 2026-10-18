@@ -59,10 +59,10 @@ export function WifiGate({ onComplete }: { onComplete: (completion: GateCompleti
     >
       <p className="sheet-intro">{t("wifi_gate_sub")}</p>
       <Field label={t("email_address")}>
-        <input className="text-input" type="email" autoComplete="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+        <input className="text-input" type="email" autoComplete="email" enterKeyHint="next" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} />
       </Field>
       <Field label={t("first_name")}>
-        <input className="text-input" type="text" autoComplete="given-name" autoCorrect="off" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
+        <input className="text-input" type="text" autoComplete="given-name" enterKeyHint="done" autoCorrect="off" value={firstName} onChange={(e) => setFirstName(e.target.value)} />
       </Field>
       <p className="sheet-footnote">
         {tf("wifi_gate_notice", { business: venue.name })} <PrivacyLink />

@@ -47,6 +47,9 @@ export interface LandingSession {
   showDialog: (content: DialogContent) => void;
 }
 
+/** The feedback box, focused when its card opens (see LandingApp). */
+export const FEEDBACK_TEXTAREA_ID = "feedback-text";
+
 export const LandingContext = createContext<LandingSession | null>(null);
 
 export function useLanding(): LandingSession {

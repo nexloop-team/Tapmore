@@ -76,7 +76,11 @@ When a venue has neither a paid subscription nor trial days left, its guest page
    - `/terms`, `/privacy` (DPDP Act 2023 notice for guests and owners), `/refunds` (cancellation and refunds), `/shipping` (delivery policy for an online service) and `/contact` (business details and where to send complaints). Razorpay checks all five before activating payments.
    - The refund windows are a business choice: they're constants at the top of [refunds/page.tsx](src/app/refunds/page.tsx). Change `POLICIES_UPDATED` in [config/legal.ts](src/config/legal.ts) whenever a policy's wording changes.
    - Only charge GST once you're GST-registered, and set `GSTIN` then.
-8. **Check the log after the first start.** In production the server lists every setting a launch still needs ([env-check.ts](src/server/env-check.ts)).
+8. **Monitoring.**
+   - **Page speed on real phones:** in Vercel, open the project → Speed Insights → Enable. The pages already send the figures (loading, responsiveness, layout shift; route shapes only, never addresses with their tokens).
+   - **Errors and traces:** create a Sentry project and set `SENTRY_DSN` (optionally `SENTRY_TRACES_SAMPLE_RATE`, default 0.1). Server only: query strings, cookies, headers and request bodies are stripped before anything is sent.
+   - **Where an API call's time goes:** every API response carries a `Server-Timing` header (database time, query count, total), shown in the browser's network panel.
+9. **Check the log after the first start.** In production the server lists every setting a launch still needs ([env-check.ts](src/server/env-check.ts)).
 
 ## Configuration
 

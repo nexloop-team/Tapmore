@@ -1,6 +1,5 @@
 import "server-only";
 import { getDb } from "../db";
-import { stampActivity } from "./stamps";
 
 /**
  * Read-only queries behind the merchant dashboard. Scans made from the
@@ -43,79 +42,86 @@ export interface VenueStats {
   sources: { source: string; scans: number }[];
 }
 
+/** A window's headline numbers: everything in VenueStats but the chart and the table list. */
+export type VenueTotals = Omit<VenueStats, "days" | "daily" | "sources">;
+
+/**
+ * Every headline count for the last `days` days in one round trip: visits
+ * and taps from events (a page or menu view counts once per visit, so a
+ * refresh isn't a second view), feedback, guests, members and stamps.
+ */
+export async function venueTotals(venueId: string, days = 30, utcOffsetMinutes = 0): Promise<VenueTotals> {
+  const since = windowStart(days, utcOffsetMinutes);
+  const row = (await (await getDb()).get(
+    `SELECT e.visitors, e.menu_views, e.wifi_opens, e.review_taps, f.n AS feedback_count, f.avg AS feedback_avg,
+            g.total AS total_guests, g.recent AS new_guests, c.n AS members, c.stamps AS stamps_held,
+            s.stamps AS stamps_given, s.redeemed AS rewards_redeemed
+       FROM (SELECT COUNT(DISTINCT (params->>'session_id')) FILTER (WHERE name = 'landing_opened') AS visitors,
+                    COUNT(DISTINCT (params->>'session_id')) FILTER (WHERE name = 'menu_viewed') AS menu_views,
+                    COUNT(*) FILTER (WHERE name = 'wifi_sheet_opened') AS wifi_opens,
+                    COUNT(*) FILTER (WHERE name = 'google_review_tapped') AS review_taps
+               FROM events
+              WHERE venue_id = ? AND name IN ('landing_opened', 'menu_viewed', 'wifi_sheet_opened', 'google_review_tapped')
+                AND created_at >= CAST(? AS TIMESTAMPTZ) AND ${GUESTS_ONLY}) e,
+            (SELECT COUNT(*) AS n, AVG(sentiment) AS avg FROM feedback WHERE venue_id = ? AND created_at >= CAST(? AS TIMESTAMPTZ)) f,
+            (SELECT COUNT(*) AS total, COUNT(*) FILTER (WHERE created_at >= CAST(? AS TIMESTAMPTZ)) AS recent FROM customers WHERE venue_id = ?) g,
+            (SELECT COUNT(*) AS n, COALESCE(SUM(stamps), 0) AS stamps FROM loyalty_cards WHERE venue_id = ?) c,
+            (SELECT COALESCE(SUM(CASE WHEN kind = 'stamp' THEN delta END), 0) AS stamps, COUNT(CASE WHEN kind = 'redeem' THEN 1 END) AS redeemed
+               FROM stamp_events WHERE venue_id = ? AND undone_at IS NULL AND created_at >= CAST(? AS TIMESTAMPTZ)) s`,
+    venueId, since, venueId, since, since, venueId, venueId, venueId, since,
+  )) as {
+    visitors: number; menu_views: number; wifi_opens: number; review_taps: number; feedback_count: number; feedback_avg: number | null;
+    total_guests: number; new_guests: number; members: number; stamps_held: number; stamps_given: number; rewards_redeemed: number;
+  };
+  return {
+    scans: row.visitors,
+    visitors: row.visitors,
+    menuViews: row.menu_views,
+    wifiOpens: row.wifi_opens,
+    reviewTaps: row.review_taps,
+    feedbackCount: row.feedback_count,
+    averageSentiment: row.feedback_avg,
+    newGuests: row.new_guests ?? 0,
+    totalGuests: row.total_guests,
+    members: row.members,
+    stampsHeld: row.stamps_held,
+    stampsGiven: row.stamps_given,
+    rewardsRedeemed: row.rewards_redeemed,
+  };
+}
+
 /**
  * A scan is a visit: one guest opening the page counts once, however many
  * times they refresh or go to the menu and back (see lib/analytics visitId).
- * Days are the venue's own, given its offset from UTC in minutes.
+ * Days are the venue's own, given its offset from UTC in minutes. The
+ * totals, the daily chart and the table list are fetched side by side.
  */
 export async function venueStats(venueId: string, days = 30, utcOffsetMinutes = 0): Promise<VenueStats> {
   const db = await getDb();
   const since = windowStart(days, utcOffsetMinutes);
   const local = `${utcOffsetMinutes >= 0 ? "+" : "-"}${Math.abs(utcOffsetMinutes)} minutes`;
-  const count = async (name: string) =>
-    (
-      (await db.get(`SELECT COUNT(*) AS n FROM events WHERE venue_id = ? AND name = ? AND created_at >= CAST(? AS TIMESTAMPTZ) AND ${GUESTS_ONLY}`, venueId, name, since)) as { n: number }
-    ).n;
-  // Page views count once per visit, so a refresh isn't a second view.
-  const visits = async (name: string) =>
-    (
-      (await db.get(`SELECT COUNT(DISTINCT (params->>'session_id')) AS n FROM events WHERE venue_id = ? AND name = ? AND created_at >= CAST(? AS TIMESTAMPTZ) AND ${GUESTS_ONLY}`, venueId, name, since)) as { n: number }
-    ).n;
-
-  const visitors = (
-    (await db.get(
-        `SELECT COUNT(DISTINCT (params->>'session_id')) AS n FROM events
-         WHERE venue_id = ? AND name = 'landing_opened' AND created_at >= CAST(? AS TIMESTAMPTZ) AND ${GUESTS_ONLY}`, venueId, since)) as { n: number }
-  ).n;
-
-  const feedback = (await db.get("SELECT COUNT(*) AS n, AVG(sentiment) AS avg FROM feedback WHERE venue_id = ? AND created_at >= CAST(? AS TIMESTAMPTZ)", venueId, since)) as { n: number; avg: number | null };
-
-  const guests = (await db.get(
-      `SELECT COUNT(*) AS total, SUM(CASE WHEN created_at >= CAST(? AS TIMESTAMPTZ) THEN 1 ELSE 0 END) AS recent
-       FROM customers WHERE venue_id = ?`, since, venueId)) as { total: number; recent: number | null };
-
-  const cards = (await db.get("SELECT COUNT(*) AS n, COALESCE(SUM(stamps), 0) AS stamps FROM loyalty_cards WHERE venue_id = ?", venueId)) as {
-    n: number;
-    stamps: number;
-  };
-
-  const dailyRows = (await db.all(
+  const [totals, dailyRows, sources] = await Promise.all([
+    venueTotals(venueId, days, utcOffsetMinutes),
+    db.all(
       `SELECT to_char((created_at + CAST(? AS INTERVAL)) AT TIME ZONE 'UTC', 'YYYY-MM-DD') AS day, COUNT(DISTINCT (params->>'session_id')) AS scans FROM events
        WHERE venue_id = ? AND name = 'landing_opened' AND created_at >= CAST(? AS TIMESTAMPTZ) AND ${GUESTS_ONLY}
-       GROUP BY 1`, local, venueId, since)) as { day: string; scans: number }[];
+       GROUP BY 1`, local, venueId, since) as Promise<unknown> as Promise<{ day: string; scans: number }[]>,
+    // A table's QR ("table-4") and NFC tag ("table-4-nfc") count as one spot; an unnamed NFC tag ("nfc") belongs to the main code.
+    db.all(
+      `SELECT base AS source, COUNT(DISTINCT session_id) AS scans FROM (
+         SELECT CASE WHEN src = 'nfc' THEN 'unknown' WHEN src LIKE '%-nfc' THEN left(src, length(src) - 4) ELSE src END AS base, session_id
+           FROM (SELECT COALESCE((params->>'source'), 'unknown') AS src, (params->>'session_id') AS session_id FROM events
+                  WHERE venue_id = ? AND name = 'landing_opened' AND created_at >= CAST(? AS TIMESTAMPTZ) AND ${GUESTS_ONLY}) AS opened
+       ) AS spots
+       GROUP BY base ORDER BY scans DESC LIMIT 8`, venueId, since) as Promise<unknown> as Promise<{ source: string; scans: number }[]>,
+  ]);
   const byDay = new Map(dailyRows.map((row) => [row.day, row.scans]));
   const daily: VenueStats["daily"] = [];
   for (let i = days - 1; i >= 0; i--) {
     const day = new Date(Date.now() + utcOffsetMinutes * 60_000 - i * 86_400_000).toISOString().slice(0, 10);
     daily.push({ day, scans: byDay.get(day) ?? 0 });
   }
-
-  // A table's QR ("table-4") and NFC tag ("table-4-nfc") count as one spot; an unnamed NFC tag ("nfc") belongs to the main code.
-  const sources = (await db.all(
-      `SELECT base AS source, COUNT(DISTINCT session_id) AS scans FROM (
-         SELECT CASE WHEN src = 'nfc' THEN 'unknown' WHEN src LIKE '%-nfc' THEN left(src, length(src) - 4) ELSE src END AS base, session_id
-           FROM (SELECT COALESCE((params->>'source'), 'unknown') AS src, (params->>'session_id') AS session_id FROM events
-                  WHERE venue_id = ? AND name = 'landing_opened' AND created_at >= CAST(? AS TIMESTAMPTZ) AND ${GUESTS_ONLY}) AS opened
-       ) AS spots
-       GROUP BY base ORDER BY scans DESC LIMIT 8`, venueId, since)) as { source: string; scans: number }[];
-
-  return {
-    days,
-    scans: visitors,
-    visitors,
-    menuViews: await visits("menu_viewed"),
-    wifiOpens: await count("wifi_sheet_opened"),
-    reviewTaps: await count("google_review_tapped"),
-    feedbackCount: feedback.n,
-    averageSentiment: feedback.avg,
-    newGuests: guests.recent ?? 0,
-    totalGuests: guests.total,
-    members: cards.n,
-    stampsHeld: cards.stamps,
-    ...(await stampActivity(venueId, since)),
-    daily,
-    sources,
-  };
+  return { days, ...totals, daily, sources };
 }
 
 export interface VenueEngagement {
@@ -132,20 +138,22 @@ export async function venueEngagement(venueId: string, days = 30, utcOffsetMinut
   const db = await getDb();
   const since = windowStart(days, utcOffsetMinutes);
   const local = `${utcOffsetMinutes >= 0 ? "+" : "-"}${Math.abs(utcOffsetMinutes)} minutes`;
-  const features = (await db.all(
+  const [features, hourRows, dishes] = (await Promise.all([
+    db.all(
       `SELECT (params->>'feature') AS feature, COUNT(DISTINCT (params->>'session_id')) AS visits FROM events
        WHERE venue_id = ? AND name = 'feature_card_tapped' AND created_at >= CAST(? AS TIMESTAMPTZ) AND ${GUESTS_ONLY}
-       GROUP BY feature ORDER BY visits DESC`, venueId, since)) as { feature: string; visits: number }[];
-  const hourRows = (await db.all(
+       GROUP BY feature ORDER BY visits DESC`, venueId, since),
+    db.all(
       `SELECT CAST(EXTRACT(HOUR FROM (created_at + CAST(? AS INTERVAL)) AT TIME ZONE 'UTC') AS INTEGER) AS hour, COUNT(DISTINCT (params->>'session_id')) AS visits FROM events
        WHERE venue_id = ? AND name = 'landing_opened' AND created_at >= CAST(? AS TIMESTAMPTZ) AND ${GUESTS_ONLY}
-       GROUP BY 1`, local, venueId, since)) as { hour: number; visits: number }[];
-  const hours = new Array<number>(24).fill(0);
-  for (const row of hourRows) hours[row.hour] = row.visits;
-  const dishes = (await db.all(
+       GROUP BY 1`, local, venueId, since),
+    db.all(
       `SELECT (params->>'item_id') AS "itemId", COUNT(DISTINCT (params->>'session_id')) AS opens FROM events
        WHERE venue_id = ? AND name = 'menu_item_opened' AND created_at >= CAST(? AS TIMESTAMPTZ) AND ${GUESTS_ONLY}
-       GROUP BY 1 ORDER BY opens DESC LIMIT 5`, venueId, since)) as { itemId: string; opens: number }[];
+       GROUP BY 1 ORDER BY opens DESC LIMIT 5`, venueId, since),
+  ])) as unknown as [{ feature: string; visits: number }[], { hour: number; visits: number }[], { itemId: string; opens: number }[]];
+  const hours = new Array<number>(24).fill(0);
+  for (const row of hourRows) hours[row.hour] = row.visits;
   return { features: features.filter((f) => f.feature), hours, dishes: dishes.filter((d) => d.itemId) };
 }
 

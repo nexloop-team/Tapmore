@@ -4,14 +4,12 @@ import { useRef, useState } from "react";
 import { api } from "@/lib/api/client";
 import type { FeedbackResponse } from "@/lib/api/contracts";
 import { Field } from "../forms";
-import { useLanding } from "../LandingContext";
+import { FEEDBACK_TEXTAREA_ID, useLanding } from "../LandingContext";
 import { FeedbackThankYou } from "./FeedbackThankYou";
 import { PhotoAttach, type AttachedPhoto } from "./PhotoAttach";
 
 /** The thank-you never appears faster than this, so it reads as "sent" rather than a flicker. */
 const MIN_SENDING_MS = 800;
-
-export const FEEDBACK_TEXTAREA_ID = "feedback-text";
 
 type Phase = { kind: "form" } | { kind: "sending" } | { kind: "thanks"; text: string; score: number; receipt: FeedbackResponse["stampReceipt"] };
 

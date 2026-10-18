@@ -2,6 +2,7 @@ import "server-only";
 import type { Db } from "../db";
 import { accessState, parseDbDate, type AccessState, type SubscriptionState, type SubscriptionStatus } from "@/lib/plans";
 import { getDb } from "../db";
+import { forgetVenue } from "../venue-cache";
 
 export interface Subscription extends SubscriptionState {
   venueId: string;
@@ -75,6 +76,7 @@ export async function extendTrial(venueId: string, days: number) {
   const current = parseDbDate((await getSubscription(venueId))?.trialEndsAt) ?? 0;
   const ends = new Date(Math.max(current, Date.now()) + days * 86_400_000).toISOString();
   (await db.run("UPDATE subscriptions SET trial_ends_at = ?, updated_at = now() WHERE venue_id = ?", ends, venueId));
+  forgetVenue(venueId);
 }
 
 export interface SubscriptionUpdate {
@@ -105,4 +107,5 @@ export async function updateSubscription(venueId: string, update: SubscriptionUp
   const sets = keys.map((key) => `${COLUMNS[key]} = ?`).join(", ");
   (await db.run(`UPDATE subscriptions SET ${sets}, updated_at = now() WHERE venue_id = ?`, ...keys.map((key) => (key === "paid" ? (update.paid ? "pro" : "free") : key === "cancelAtPeriodEnd" ? (update.cancelAtPeriodEnd ? 1 : 0) : (update[key] ?? null))),
     venueId,));
+  forgetVenue(venueId);
 }

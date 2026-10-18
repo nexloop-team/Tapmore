@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { useEffect } from "react";
+import { scrollMotion } from "@/lib/browser";
 
 /**
  * Links like /design#wifi land on the Wi-Fi card: scrolled to the middle of
@@ -21,7 +22,7 @@ export function HashFocus() {
       if (!target && ++tries < 25) return;
       clearInterval(timer);
       if (!target) return;
-      target.scrollIntoView({ behavior: "smooth", block: "center" });
+      target.scrollIntoView({ behavior: scrollMotion(), block: "center" });
       target.classList.remove("flash-target");
       void target.offsetWidth;
       target.classList.add("flash-target");

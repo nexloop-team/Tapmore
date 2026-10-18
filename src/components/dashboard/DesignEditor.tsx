@@ -4,10 +4,10 @@ import { GripVertical, LayoutGrid, List, Plus, Rows4, Trash2, type LucideIcon } 
 import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { LINK_ICON_TOKENS } from "@/components/icons";
-import { STYLE_FONT_HREF } from "@/lib/theme";
 import { buildFeatures, sanitiseExternalUrl, wifiView, type CoreFeature, type FeatureKey } from "@/lib/venue/features";
 import { expandSocialLink } from "@/lib/venue/social";
-import { LINK_LABEL_TOKENS, type VenueConfig } from "@/lib/venue/schema";
+import { LINK_LABEL_TOKENS } from "@/lib/venue/constants";
+import type { VenueConfig } from "@/lib/venue/schema";
 import type { ButtonShape, HeaderStyle, PageLayout, PublicVenue } from "@/lib/venue/types";
 import { Card, Field, HelpTip, ImageField, newClientId, SaveBar, Switch, SwitchRow, TextField } from "./ui";
 import { useLivePreview } from "@/lib/live-preview";
@@ -19,9 +19,9 @@ import { useVenueDraft } from "./useVenueDraft";
 
 const PRESETS = [
   { value: null, label: "Default", hint: "Phone's own font, fastest to load", font: "-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif", weight: 700 },
-  { value: "classic", label: "Classic", hint: "Playfair Display, for bistros and pubs", font: "'Playfair Display', Georgia, serif", weight: 600 },
-  { value: "editorial", label: "Editorial", hint: "Petrona, warm and bookish", font: "Petrona, Georgia, serif", weight: 600 },
-  { value: "modern", label: "Modern", hint: "Outfit, clean and round", font: "Outfit, system-ui, sans-serif", weight: 600 },
+  { value: "classic", label: "Classic", hint: "Playfair Display, for bistros and pubs", font: "var(--font-classic), Georgia, serif", weight: 600 },
+  { value: "editorial", label: "Editorial", hint: "Petrona, warm and bookish", font: "var(--font-editorial), Georgia, serif", weight: 600 },
+  { value: "modern", label: "Modern", hint: "Outfit, clean and round", font: "var(--font-modern), system-ui, sans-serif", weight: 600 },
 ] as const;
 
 const LAYOUTS: { value: PageLayout; label: string; hint: string; icon: LucideIcon }[] = [
@@ -117,6 +117,8 @@ export function DesignEditor({
   shortCode: string;
   config: VenueConfig;
 }) {
+  // Compiled by the React Compiler (annotation mode, see next.config): re-renders only what an edit touches.
+  "use memo";
   const editor = useVenueDraft<Draft>(venueId, {
     branding: config.branding,
     wifi: config.wifi ?? null,
@@ -292,8 +294,8 @@ export function DesignEditor({
         <div className="editor-flow">
           <Card id="logo" title={<Step n={1}>Header</Step>} description="The top of your page: who you are at a glance.">
             <div className="row">
-              <ImageField venueId={venueId} label="Logo" value={branding.logoUrl} onChange={(url) => setBranding({ logoUrl: url })} hint="Square, at least 300×300." />
-              <ImageField venueId={venueId} label="Cover photo" value={branding.coverImageUrl} onChange={(url) => setBranding({ coverImageUrl: url })} hint="Landscape, about 1200×600." wide />
+              <ImageField venueId={venueId} kind="logo" label="Logo" value={branding.logoUrl} onChange={(url) => setBranding({ logoUrl: url })} hint="Square, at least 300×300." />
+              <ImageField venueId={venueId} kind="cover" label="Cover photo" value={branding.coverImageUrl} onChange={(url) => setBranding({ coverImageUrl: url })} hint="Landscape, about 1200×600." wide />
             </div>
             <div className="row" style={{ marginTop: 14 }}>
               <TextField
@@ -322,10 +324,6 @@ export function DesignEditor({
           </Card>
 
           <Card title={<Step n={2}>Colours</Step>} description="Pick a palette. It sets the page and every tile, and text stays readable on each.">
-            {/* Lets each preset tile show its own face. */}
-            {Object.values(STYLE_FONT_HREF).map((href) => (
-              <link key={href} rel="stylesheet" href={href} />
-            ))}
             <PalettePicker branding={branding} onChange={setBranding} customInput={(value, onChange) => <HexInput value={value} onChange={onChange} />} />
           </Card>
 
@@ -562,7 +560,7 @@ export function DesignEditor({
         </div>
       </div>
 
-      <PreviewPane src={`/s?i=${encodeURIComponent(shortCode)}&s=preview&embed=1`} version={editor.version} title="Live page preview" fullHref={`/s?i=${encodeURIComponent(shortCode)}&s=preview`} />
+      <PreviewPane src={`/s?i=${encodeURIComponent(shortCode)}&s=preview&embed=1`} title="Live page preview" fullHref={`/s?i=${encodeURIComponent(shortCode)}&s=preview`} />
 
       <SaveBar dirty={editor.dirty} saving={editor.saving} error={editor.error} onSave={editor.save} onReset={editor.reset} />
     </div>

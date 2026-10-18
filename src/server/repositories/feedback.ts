@@ -41,16 +41,15 @@ export async function photosToday(venueId: string): Promise<number> {
 
 /** Feedback newer than this owner's last look at the inbox (or the last 14 days, before their first look). */
 export async function unreadFeedback(venueId: string, userId: string): Promise<{ count: number; latest: string | null }> {
-  const db = await getDb();
-  const seen = (await db.get("SELECT feedback_seen_at FROM venue_members WHERE venue_id = ? AND user_id = ?", venueId, userId)) as { feedback_seen_at: string | null } | undefined;
-  const since = seen?.feedback_seen_at ?? null;
-  const where = since ? "created_at > ?" : "created_at >= now() + INTERVAL '-14 days'";
-  const args = since ? [venueId, since] : [venueId];
-  const count = ((await db.get(`SELECT COUNT(*) AS n FROM feedback WHERE venue_id = ? AND ${where}`, ...args)) as { n: number }).n;
-  const latest = count
-    ? (((await db.get(`SELECT text FROM feedback WHERE venue_id = ? AND ${where} ORDER BY created_at DESC LIMIT 1`, ...args)) as { text: string } | undefined)?.text ?? null)
-    : null;
-  return { count, latest };
+  // One round trip: the owner's last look, the count since, and the newest note.
+  const row = (await (await getDb()).get(
+    `SELECT COUNT(*) AS n, (array_agg(f.text ORDER BY f.created_at DESC))[1] AS latest
+       FROM feedback f
+      WHERE f.venue_id = ?
+        AND f.created_at > COALESCE((SELECT feedback_seen_at FROM venue_members WHERE venue_id = ? AND user_id = ?), now() + INTERVAL '-14 days')`,
+    venueId, venueId, userId,
+  )) as { n: number; latest: string | null };
+  return { count: row.n, latest: row.n ? row.latest : null };
 }
 
 export async function markFeedbackSeen(venueId: string, userId: string) {

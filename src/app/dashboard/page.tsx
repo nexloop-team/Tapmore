@@ -6,15 +6,13 @@ import { VenueAvatar } from "@/components/dashboard/Shell";
 import { firstParam } from "@/server/request";
 import { isAdmin, requireUser } from "@/server/auth/session";
 import { accessBadge } from "@/lib/plans";
-import { getSubscription } from "@/server/repositories/subscriptions";
-import { listStaffVenuesForUser, listVenuesForUser } from "@/server/repositories/venues";
+import { listStaffVenuesForUser, listVenueSummariesForUser } from "@/server/repositories/venues";
 
 /** Lands new merchants in onboarding, single-venue merchants in their venue, and lists the rest. */
 export default async function DashboardHome({ searchParams }: PageProps<"/dashboard">) {
   const user = await requireUser();
   const verified = firstParam((await searchParams).verified);
-  const venues = await listVenuesForUser(user.id);
-  const tills = await listStaffVenuesForUser(user.id);
+  const [venues, tills] = await Promise.all([listVenueSummariesForUser(user.id), listStaffVenuesForUser(user.id)]);
   // Admins don't need a venue of their own: no venue means the console, not the setup wizard.
   if (venues.length === 0 && tills.length === 0 && isAdmin(user)) redirect("/admin");
   if (venues.length === 0 && tills.length === 0) redirect(`/onboarding${verified ? `?verified=${encodeURIComponent(verified)}` : ""}`);
@@ -34,13 +32,13 @@ export default async function DashboardHome({ searchParams }: PageProps<"/dashbo
         }
       />
       <div className="venue-list">
-        {venues.map(async (venue) => {
-          const badge = accessBadge(await getSubscription(venue.id));
+        {venues.map((venue) => {
+          const badge = accessBadge(venue.subscription);
           return (
             <Link key={venue.id} href={`/dashboard/${venue.id}`} className="card venue-tile">
-              <VenueAvatar venue={{ name: venue.config.name, logoUrl: venue.config.branding.logoUrl ?? null }} />
+              <VenueAvatar venue={{ name: venue.name, logoUrl: venue.logoUrl }} />
               <span className="venue-tile-text">
-                <strong>{venue.config.name}</strong>
+                <strong>{venue.name}</strong>
                 <span className="mono muted">/{venue.shortCode}</span>
               </span>
               <span className="inline">

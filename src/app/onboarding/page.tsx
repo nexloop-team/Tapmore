@@ -8,6 +8,9 @@ import { uiFont } from "@/app/fonts";
 import { firstParam } from "@/server/request";
 import "@/styles/app.css";
 
+// Blocks on purpose (Cache Components): the setup wizard is for the signed-in owner; it waits for that check.
+export const instant = false;
+
 export const metadata: Metadata = { title: "Set up your venue" };
 
 export default async function OnboardingPage({ searchParams }: PageProps<"/onboarding">) {

@@ -52,7 +52,7 @@ export function TextField({
   };
   return (
     <Field label={label} hint={hint} htmlFor={id}>
-      {multiline ? <textarea className="textarea" {...common} /> : <input className="input" type={type} autoComplete={autoComplete} {...common} />}
+      {multiline ? <textarea className="textarea" {...common} /> : <input className="input" type={type} autoComplete={autoComplete} enterKeyHint="done" {...common} />}
     </Field>
   );
 }
@@ -130,6 +130,7 @@ export function ImageField({
   onChange,
   hint,
   wide,
+  kind,
 }: {
   venueId: string;
   label: string;
@@ -137,6 +138,8 @@ export function ImageField({
   onChange: (url: string | null) => void;
   hint?: string;
   wide?: boolean;
+  /** What the image is for: it's stored at that use's size. */
+  kind: "logo" | "cover" | "dish";
 }) {
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -146,7 +149,7 @@ export function ImageField({
     setBusy(true);
     setError(null);
     try {
-      onChange(await dashboardApi.uploadImage(venueId, file));
+      onChange(await dashboardApi.uploadImage(venueId, file, kind));
     } catch (err) {
       setError(errorMessage(err));
     } finally {

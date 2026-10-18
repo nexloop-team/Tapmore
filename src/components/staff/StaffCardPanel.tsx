@@ -2,13 +2,23 @@
 
 import { AlertTriangle, Cake, Check, ChevronLeft, Gift, Loader2, Minus, Plus, Undo2 } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useOffline } from "next/offline";
+import { useEffect, useState } from "react";
 import { ApiRequestError } from "@/lib/api/client";
 import { dashboardApi, errorMessage } from "@/lib/api/dashboard-client";
 import type { StaffCardView } from "@/lib/api/staff-contracts";
 import { initials } from "@/lib/format";
 import { daysInMonth } from "@/lib/validation";
+import { useConfirm } from "../dashboard/confirm";
 import { ScanCardButton } from "./ScanCardButton";
+import { enqueue, newRequestId, onQueuedSent, type TillAction } from "./till-queue";
+
+type Queueable = Pick<TillAction, "kind"> & Partial<{ count: number; force: boolean; tierIndex: number; reward: string }>;
+
+/** The card with `stamps` stamps (and its rewards unlocked to match): what the till shows before the server confirms. */
+function withStamps(card: StaffCardView, stamps: number): StaffCardView {
+  return { ...card, stamps, tiers: card.tiers.map((tier) => ({ ...tier, unlocked: stamps >= tier.stampsRequired })) };
+}
 
 /** Dots drawn per row on the card; longer cards wrap. */
 const DOTS_PER_ROW = 10;
@@ -25,16 +35,45 @@ export function StaffCardPanel({ initial }: { initial: StaffCardView }) {
   /** The birthday being added or corrected, while the editor is open. */
   const [birthdayEdit, setBirthdayEdit] = useState<{ month: number; day: number } | null>(null);
 
-  async function act(run: () => Promise<StaffCardView>, done: (next: StaffCardView) => void) {
-    setBusy(true);
+  const confirm = useConfirm();
+  const offline = useOffline();
+  const name = card.guestName || "Guest";
+
+  // A stamp queued while offline reached the server: show the card as it really is now.
+  useEffect(() => onQueuedSent((cardId, view) => cardId === initial.cardId && setCard(view)), [initial.cardId]);
+
+  /**
+   * Runs a till action; `rollback` undoes what the screen already showed if
+   * the server says no. A stamp, redeem or undo (`queue`) made without a
+   * connection is kept on the till and sent when it's back, the screen
+   * showing it as done (`local`) meanwhile.
+   */
+  async function act(
+    run: (requestId: string) => Promise<StaffCardView>,
+    done: (next: StaffCardView) => void,
+    rollback?: () => void,
+    queue?: { action: Queueable; local: StaffCardView; after?: () => void },
+  ) {
+    const requestId = newRequestId();
+    const keepForLater = () => {
+      enqueue({ ...queue!.action, id: requestId, cardId: card.cardId, guest: name, at: Date.now() } as TillAction);
+      setCard(queue!.local);
+      setCount(1);
+      queue!.after?.();
+      setMessage({ tone: "ok", text: "No connection: saved on this till. It goes through as soon as you're back online (within 2 minutes)." });
+    };
     setMessage(null);
     setConfirmAnother(null);
+    if (queue && offline) return keepForLater();
+    setBusy(true);
     try {
-      const next = await run();
+      const next = await run(requestId);
       setCard(next);
       setCount(1);
       done(next);
     } catch (error) {
+      if (queue && error instanceof ApiRequestError && error.status === 0) return keepForLater();
+      rollback?.();
       if (error instanceof ApiRequestError && error.status === 409) setConfirmAnother(error.message);
       else setMessage({ tone: "error", text: errorMessage(error) });
     } finally {
@@ -42,17 +81,55 @@ export function StaffCardPanel({ initial }: { initial: StaffCardView }) {
     }
   }
 
-  const stamp = (force = false) => act(() => dashboardApi.staffStamp({ cardId: card.cardId, count, force }), (next) => setStamped(next.stamps - card.stamps));
+  /**
+   * "Stamp added" shows the moment it's tapped and the server confirms behind
+   * it; a refusal puts the card back as it was, with the reason. Not inside
+   * the cooldown, where the server asks "add another anyway?" first.
+   */
+  const stamp = (force = false) => {
+    const before = card;
+    const adding = Math.min(count, Math.max(0, card.goal - card.stamps));
+    // Offline, the till asks the cooldown question itself (the server can't).
+    if (offline && !force && card.stampedMinutesAgo !== null) {
+      setConfirmAnother(`This card was stamped ${card.stampedMinutesAgo === 0 ? "just now" : `${card.stampedMinutesAgo} min ago`}. Add another anyway?`);
+      return;
+    }
+    const instant = adding > 0 && (force || card.stampedMinutesAgo === null);
+    if (instant) {
+      const stamps = card.stamps + adding;
+      setCard({
+        ...card,
+        stamps,
+        tiers: card.tiers.map((tier) => ({ ...tier, unlocked: stamps >= tier.stampsRequired })),
+        // Shown (disabled while saving) so the button doesn't jump in when the server answers.
+        undoable: { kind: "stamp", delta: adding, rewardName: null },
+      });
+      setStamped(adding);
+    }
+    return act(
+      (requestId) => dashboardApi.staffStamp({ cardId: card.cardId, count, force, requestId }),
+      // The real count; but if staff already moved on from "Stamp added", don't bring it back.
+      (next) => setStamped((shown) => (instant && shown === null ? null : next.stamps - before.stamps)),
+      instant
+        ? () => {
+            setCard(before);
+            setStamped(null);
+          }
+        : undefined,
+      { action: { kind: "stamp", count, force: true }, local: { ...withStamps(before, before.stamps + adding), undoable: null, stampedMinutesAgo: 0 }, after: () => setStamped(adding) },
+    );
+  };
   const undo = () =>
     act(
-      () => dashboardApi.staffUndo({ cardId: card.cardId }),
+      (requestId) => dashboardApi.staffUndo({ cardId: card.cardId, requestId }),
       () => {
         setStamped(null);
         setMessage({ tone: "ok", text: "Undone." });
       },
+      undefined,
+      { action: { kind: "undo" }, local: { ...withStamps(card, Math.max(0, card.stamps - (card.undoable?.delta ?? 0))), undoable: null }, after: () => setStamped(null) },
     );
 
-  const name = card.guestName || "Guest";
   const unlocked = card.tiers.filter((tier) => tier.unlocked);
   const nextTier = card.tiers.find((tier) => !tier.unlocked);
   const room = Math.max(0, card.goal - card.stamps);
@@ -266,11 +343,13 @@ export function StaffCardPanel({ initial }: { initial: StaffCardView }) {
                 type="button"
                 className="staff-btn staff-btn-secondary"
                 disabled={busy}
-                onClick={() => {
-                  if (!window.confirm(`Give ${tier.rewardName} now? This uses ${tier.stampsRequired} stamps.`)) return;
+                onClick={async () => {
+                  if (!(await confirm({ title: `Give ${tier.rewardName} now?`, body: `This uses ${tier.stampsRequired} stamps.`, confirmLabel: "Give reward" }))) return;
                   void act(
-                    () => dashboardApi.staffRedeem({ cardId: card.cardId, tierIndex: tier.index }),
+                    (requestId) => dashboardApi.staffRedeem({ cardId: card.cardId, tierIndex: tier.index, requestId }),
                     () => setMessage({ tone: "ok", text: `${tier.rewardName} redeemed. Enjoy!` }),
+                    undefined,
+                    { action: { kind: "redeem", tierIndex: tier.index, reward: tier.rewardName }, local: { ...withStamps(card, card.stamps - tier.stampsRequired), undoable: null } },
                   );
                 }}
               >

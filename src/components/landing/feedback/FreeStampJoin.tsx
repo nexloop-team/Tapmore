@@ -111,10 +111,10 @@ export function FreeStampJoin({ receipt, after }: { receipt: NonNullable<Feedbac
         }}
       >
         <Field label={t("your_name")}>
-          <input className="text-input" type="text" autoComplete="name" autoCorrect="off" value={name} onChange={(e) => setName(e.target.value)} />
+          <input className="text-input" type="text" autoComplete="name" enterKeyHint="next" autoCorrect="off" value={name} onChange={(e) => setName(e.target.value)} />
         </Field>
         <Field label={t("email_address")}>
-          <input className="text-input" type="email" autoComplete="email" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+          <input className="text-input" type="email" autoComplete="email" enterKeyHint="done" inputMode="email" value={email} onChange={(e) => setEmail(e.target.value)} />
         </Field>
         {birthdayAskOn(venue) && (
           <div className="birthday-block">

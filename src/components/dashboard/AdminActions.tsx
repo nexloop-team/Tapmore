@@ -388,7 +388,7 @@ export function AdminExtendTrial({ venueId, name, offline }: { venueId: string; 
           toast({ text: "Trial extended." });
           router.refresh();
         } catch (err) {
-          toast({ text: errorMessage(err) });
+          toast({ text: errorMessage(err), tone: "error" });
         } finally {
           setPending(false);
         }

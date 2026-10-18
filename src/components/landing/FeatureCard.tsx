@@ -2,6 +2,7 @@
 
 import { ChevronDown, ChevronRight, X } from "lucide-react";
 import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
+import { scrollMotion } from "@/lib/browser";
 import { useLanding } from "./LandingContext";
 
 /**
@@ -115,19 +116,19 @@ interface ExpandableCardProps extends RowProps {
   tile?: TileSpec;
   /** Called synchronously inside the tap, so it can grab focus for the iOS keyboard. */
   onToggle?: (open: boolean, event: MouseEvent<HTMLButtonElement>) => void;
-  /** Don't mount the content until first opened (e.g. the Sudoku board). */
-  lazy?: boolean;
+  /** A finger or the keyboard is on the card: start fetching the sheet's code before the tap lands. */
+  onIntent?: () => void;
   children: ReactNode;
 }
 
 /**
  * A card whose row toggles an inline sheet. Sheets are independent: several
  * can be open at once. Opening scrolls the card to the top once the sheet
- * has started to grow.
+ * has started to grow. The content mounts on first open and then stays.
  */
-export function ExpandableCard({ feature, label, icon, tint, onToggle, lazy = false, tile, children }: ExpandableCardProps) {
+export function ExpandableCard({ feature, label, icon, tint, onToggle, onIntent, tile, children }: ExpandableCardProps) {
   const [isOpen, setOpen] = useState(false);
-  const [hasOpened, setHasOpened] = useState(!lazy);
+  const [hasOpened, setHasOpened] = useState(false);
   const wrapperRef = useRef<HTMLDivElement>(null);
   const sheetId = useId();
 
@@ -139,14 +140,14 @@ export function ExpandableCard({ feature, label, icon, tint, onToggle, lazy = fa
     if (next) setHasOpened(true);
     onToggle?.(next, event);
     if (next && !tile) {
-      setTimeout(() => wrapperRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 350);
+      setTimeout(() => wrapperRef.current?.scrollIntoView({ behavior: scrollMotion(), block: "start" }), 350);
     }
   }
 
   if (tile) {
     return (
       <div className={tileClass(tile)} data-feature={feature}>
-        <button type="button" className="tile" aria-haspopup="dialog" aria-expanded={isOpen} onClick={toggle}>
+        <button type="button" className="tile" aria-haspopup="dialog" aria-expanded={isOpen} onClick={toggle} onPointerDown={onIntent} onFocus={onIntent}>
           {tile.content}
         </button>
         <TileSheet open={isOpen} label={label} onClose={close}>
@@ -158,7 +159,7 @@ export function ExpandableCard({ feature, label, icon, tint, onToggle, lazy = fa
 
   return (
     <div className="feature-wrapper" ref={wrapperRef} data-feature={feature}>
-      <button type="button" className="feature-card" aria-expanded={isOpen} aria-controls={sheetId} onClick={toggle}>
+      <button type="button" className="feature-card" aria-expanded={isOpen} aria-controls={sheetId} onClick={toggle} onPointerDown={onIntent} onFocus={onIntent}>
         <RowContent label={label} icon={icon} tint={tint} chevron="down" />
       </button>
       <section id={sheetId} className={`sheet${isOpen ? " open" : ""}`} aria-label={label} inert={!isOpen}>

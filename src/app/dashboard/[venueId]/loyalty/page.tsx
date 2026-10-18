@@ -13,7 +13,8 @@ export default async function LoyaltyPage({ params }: PageProps<"/dashboard/[ven
   const { venue } = await loadDashboardVenue((await params).venueId);
   const program = venue.config.loyaltyProgram;
   const crm = venue.config.crm;
-  const settings = await getVenueSettings(venue.id);
+  // Independent of each other: fetched side by side.
+  const [settings, referrals, devices, members] = await Promise.all([getVenueSettings(venue.id), referralStats(venue.id), listStaffDevices(venue.id), listStaffMembers(venue.id)]);
   return (
     <>
       <div className="page-head">
@@ -25,14 +26,14 @@ export default async function LoyaltyPage({ params }: PageProps<"/dashboard/[ven
       <LoyaltyEditor
         venueId={venue.id}
         initial={{ loyaltyProgram: program ?? null, crm }}
-        referralStats={await referralStats(venue.id)}
+        referralStats={referrals}
         previewUrl={`/s?i=${encodeURIComponent(venue.shortCode)}&s=preview`}
         automations={settings.automations}
         feedbackStamp={settings.stampPolicy.feedbackStamp}
         till={
           <>
-            <StaffDevices venueId={venue.id} devices={await listStaffDevices(venue.id)} cooldownMinutes={settings.stampPolicy.cooldownMinutes} enabled={!!program && program.stampsEnabled !== false} />
-            <StaffMembers venueId={venue.id} members={await listStaffMembers(venue.id)} />
+            <StaffDevices venueId={venue.id} devices={devices} cooldownMinutes={settings.stampPolicy.cooldownMinutes} enabled={!!program && program.stampsEnabled !== false} />
+            <StaffMembers venueId={venue.id} members={members} />
           </>
         }
       />

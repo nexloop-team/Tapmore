@@ -27,7 +27,7 @@ export function GuestDelete({ venueId, customerId, email }: { venueId: string; c
       await dashboardApi.deleteGuest(venueId, customerId);
       router.refresh();
     } catch (error) {
-      toast({ text: errorMessage(error) });
+      toast({ text: errorMessage(error), tone: "error" });
       setBusy(false);
     }
   }

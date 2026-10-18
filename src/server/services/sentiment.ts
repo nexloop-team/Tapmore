@@ -59,7 +59,8 @@ async function googleSentiment(text: string, apiKey: string): Promise<number | n
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ document: { type: "PLAIN_TEXT", content: text }, encodingType: "UTF8" }),
-      signal: AbortSignal.timeout(5000),
+      // The guest's thank-you waits on this; past 1.5 s the word list answers instead.
+      signal: AbortSignal.timeout(1500),
     });
     if (!response.ok) return null;
     const json = (await response.json()) as { documentSentiment?: { score?: number } };

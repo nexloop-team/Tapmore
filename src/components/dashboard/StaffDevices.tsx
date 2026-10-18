@@ -42,6 +42,9 @@ export function StaffDevices({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [cooldown, setCooldown] = useState(cooldownMinutes);
+  /** Unpaired here: gone from the list at once, without fetching the page again. */
+  const [unpaired, setUnpaired] = useState<string[]>([]);
+  const listed = devices.filter((device) => !unpaired.includes(device.id));
 
   async function addDevice() {
     setBusy(true);
@@ -59,7 +62,7 @@ export function StaffDevices({
     if (!(await ask({ title: `Unpair “${name}”?`, body: "It stops being able to stamp cards straight away.", confirmLabel: "Unpair device", danger: true }))) return;
     try {
       await dashboardApi.revokeStaffDevice(venueId, id);
-      router.refresh();
+      setUnpaired((ids) => [...ids, id]);
     } catch (err) {
       setError(errorMessage(err));
     }
@@ -87,9 +90,9 @@ export function StaffDevices({
         <p>Lost a device? Tap <strong>Unpair</strong> and it stops working straight away.</p>
       </HelpTip>
 
-      {devices.length > 0 && (
+      {listed.length > 0 && (
         <div className="list-editor" style={{ marginBottom: 14 }}>
-          {devices.map((device) => (
+          {listed.map((device) => (
             <div key={device.id} className="list-row">
               <div className="list-row-head">
                 <Smartphone size={18} aria-hidden />

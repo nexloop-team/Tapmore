@@ -3,6 +3,7 @@
 import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { preload } from "react-dom";
 import { dashboardApi, errorMessage } from "@/lib/api/dashboard-client";
 import { useConfirm } from "./confirm";
 import { useToast } from "./toast";
@@ -38,6 +39,8 @@ function loadCheckout(): Promise<boolean> {
 
 /** Subscribe (Razorpay Checkout in a pop-up, or straight on in dev mode). */
 export function SubscribeButton({ venueId, label, variant = "primary" }: { venueId: string; label: string; variant?: "primary" | "light" }) {
+  // Fetched while the owner reads the page, so the payment window opens without a wait.
+  preload(CHECKOUT_SCRIPT, { as: "script" });
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);

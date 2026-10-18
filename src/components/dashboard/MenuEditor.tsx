@@ -6,7 +6,8 @@ import { VegMark } from "@/components/menu/VegMark";
 import { useLivePreview } from "@/lib/live-preview";
 import { dashboardApi, errorMessage } from "@/lib/api/dashboard-client";
 import { isIndianMenu, menuPriceFormat } from "@/lib/venue/region";
-import { ALLERGENS, DIETARY_TAGS, FOOD_TYPES, LINK_LABEL_TOKENS, MENU_BADGES, type VenueConfig } from "@/lib/venue/schema";
+import { ALLERGENS, DIETARY_TAGS, FOOD_TYPES, LINK_LABEL_TOKENS, MENU_BADGES } from "@/lib/venue/constants";
+import type { VenueConfig } from "@/lib/venue/schema";
 import { useConfirm } from "./confirm";
 import { PreviewPane } from "./EditorFrame";
 import { MenuAiTools } from "./MenuAiTools";
@@ -82,6 +83,8 @@ export function MenuEditor({
   ai: "on" | "off";
   importLimits: { maxImages: number; pdf: boolean };
 }) {
+  // Compiled by the React Compiler (annotation mode, see next.config): re-renders only what an edit touches.
+  "use memo";
   const editor = useVenueDraft<{ menus: VenueConfig["menus"] }>(venueId, { menus });
   const ask = useConfirm();
   const list = editor.draft.menus;
@@ -280,7 +283,7 @@ export function MenuEditor({
           </div>
         </aside>
       ) : (
-        <PreviewPane src={`${previewUrl}&embed=1`} version={editor.version} title="Live menu preview" fullHref={previewUrl} />
+        <PreviewPane src={`${previewUrl}&embed=1`} title="Live menu preview" fullHref={previewUrl} />
       )}
 
       <SaveBar dirty={editor.dirty} saving={editor.saving} error={editor.error} onSave={editor.save} onReset={editor.reset} />
@@ -577,7 +580,7 @@ function ItemEditor({
       )}
 
       <TextField label="Description (optional)" value={item.description} onChange={(value) => set({ description: value })} multiline maxLength={500} placeholder="What's in it, in a line or two" />
-      <ImageField venueId={venueId} label="Photo (optional)" value={item.imageUrl} onChange={(url) => set({ imageUrl: url })} />
+      <ImageField venueId={venueId} kind="dish" label="Photo (optional)" value={item.imageUrl} onChange={(url) => set({ imageUrl: url })} />
 
       <div className="field">
         <span className="field-label">Tags</span>

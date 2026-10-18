@@ -355,6 +355,52 @@ describe("till races", () => {
   });
 });
 
+describe("guest page analytics", () => {
+  it("stores a batch of events in one beacon, and still takes a single event", async () => {
+    const venue = await stampVenue();
+    const { POST } = await import("@/app/api/events/route");
+    const post = (body: object) =>
+      POST(new Request("http://localhost/api/events", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }), undefined);
+    const params = { venue_id: venue.id, session_id: "batch-visit" };
+    expect((await post({ events: [{ name: "screen_viewed", params }, { name: "landing_opened", params: { ...params, features_shown: "menu" } }] })).status).toBe(204);
+    const single = await post({ name: "menu_viewed", params });
+    expect(single.status).toBe(204);
+    // Every API answer says where its time went: database time and query count, and the whole request.
+    expect(single.headers.get("server-timing")).toMatch(/^db;dur=\d+(\.\d)?;desc="\d+ quer(y|ies)", total;dur=\d+(\.\d)?$/);
+    expect((await post({ events: [] })).status).toBe(400);
+    const db = await m.db.getDb();
+    const rows = await db.all<{ name: string }>("SELECT name FROM events WHERE venue_id = ? ORDER BY id", venue.id);
+    expect(rows.map((row) => row.name)).toEqual(["screen_viewed", "landing_opened", "menu_viewed"]);
+    // Events for a venue that doesn't exist are dropped, quietly.
+    expect((await post({ events: [{ name: "screen_viewed", params: { venue_id: "ven_nope", session_id: "x" } }] })).status).toBe(204);
+    expect((await db.get<{ n: number }>("SELECT COUNT(*) AS n FROM events WHERE venue_id = 'ven_nope'"))!.n).toBe(0);
+  });
+});
+
+describe("error reports", () => {
+  it("leave out tokens in query strings, cookies, headers and request bodies", async () => {
+    const { scrubEvent } = await import("./monitoring");
+    const event = scrubEvent({
+      request: { url: "https://tapmore.app/card/crd_1?t=secret-token", query_string: "t=secret-token", cookies: { tt_session: "x" }, headers: { cookie: "x" }, data: '{"email":"guest@example.com"}' },
+    });
+    expect(event.request).toEqual({ url: "https://tapmore.app/card/crd_1" });
+  });
+
+  it("strip the same from traces: addresses lose their query string, headers go", async () => {
+    const { scrubEvent } = await import("./monitoring");
+    const event = scrubEvent({
+      contexts: {
+        trace: { data: { "http.target": "/api/cards/crd_1/state?t=secret-token", "http.request.header.cookie": "tt_session=x", "http.method": "GET" } },
+        nextjs: { request_path: "/card/crd_1?t=secret-token" },
+      },
+      spans: [{ description: "GET /reset-password?token=secret-token", data: { "url.full": "https://tapmore.app/reset-password?token=secret-token", "url.query": "token=secret-token" } }],
+    });
+    expect(JSON.stringify(event)).not.toContain("secret-token");
+    expect(JSON.stringify(event)).not.toContain("tt_session");
+    expect(event.contexts?.trace?.data).toEqual({ "http.target": "/api/cards/crd_1/state", "http.method": "GET" });
+  });
+});
+
 describe("joining from the guest page", () => {
   it("needs the “I agree to join” box ticked", async () => {
     const venue = await stampVenue();
@@ -439,6 +485,31 @@ describe("rate limits", () => {
     await m.http.rateLimitKey(key, 1, 50);
     await new Promise((resolve) => setTimeout(resolve, 120));
     await expect(m.http.rateLimitKey(key, 1, 50)).resolves.toBeUndefined();
+  });
+
+  it("check several limits in one write, refusing when any one is over", async () => {
+    const minute = `many-minute-${Date.now()}`;
+    const day = `many-day-${Date.now()}`;
+    const limits = [
+      { key: minute, limit: 5 },
+      { key: day, limit: 2, windowMs: 24 * 60 * 60_000 },
+    ];
+    await m.http.rateLimitMany(limits);
+    await m.http.rateLimitMany(limits);
+    // The daily limit is spent, though the per-minute one isn't.
+    await expect(m.http.rateLimitMany(limits)).rejects.toThrow(/too many/i);
+    // Both counters went up together, each in its own window; the refused
+    // third try was turned away by this instance's own count, before the database.
+    const db = await m.db.getDb();
+    const hits = async (key: string, windowMs: number) =>
+      (await db.get<{ hits: number }>("SELECT hits FROM rate_limits WHERE key = ?", createHash("sha256").update(`${windowMs}:${key}`).digest("base64url")))?.hits;
+    expect(await hits(minute, 60_000)).toBe(2);
+    expect(await hits(day, 24 * 60 * 60_000)).toBe(2);
+    // Another instance pushed the shared daily count over: refused here too, though this instance's own count isn't.
+    const other = `many-other-${Date.now()}`;
+    await m.http.rateLimitMany([{ key: other, limit: 2, windowMs: 24 * 60 * 60_000 }]);
+    await db.run("UPDATE rate_limits SET hits = hits + 5 WHERE key = ?", createHash("sha256").update(`${24 * 60 * 60_000}:${other}`).digest("base64url"));
+    await expect(m.http.rateLimitMany([{ key: `${other}-minute`, limit: 50 }, { key: other, limit: 2, windowMs: 24 * 60 * 60_000 }])).rejects.toThrow(/too many/i);
   });
 });
 

@@ -77,13 +77,14 @@ export function EditorPanel({ id, children }: { id: string; children: ReactNode 
 }
 
 /** The phone on the right. Frames marked data-live-preview get the editor's draft (see lib/live-preview). */
-export function PreviewPane({ src, version, title, fullHref }: { src: string; version: number; title: string; fullHref: string }) {
+export function PreviewPane({ src, title, fullHref }: { src: string; title: string; fullHref: string }) {
   return (
     <aside className="preview-pane" aria-label={title}>
       <span className="preview-label">Live preview</span>
       <div className="phone">
         <div className="phone-screen">
-          <iframe key={version} data-live-preview src={src} title={title} />
+          {/* Loaded once: saves and edits reach it as messages, so it never flashes white. */}
+          <iframe data-live-preview src={src} title={title} />
         </div>
       </div>
       <p className="hint preview-foot">

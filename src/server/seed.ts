@@ -214,12 +214,14 @@ export function demoVenue(idOrCode: string): PublicVenue | null {
   return DEMO_VENUES.find((venue) => venue.id === idOrCode || venue.shortCode === idOrCode) ?? null;
 }
 
+/** Changes whenever the demo content in this file does. */
+export const DEMO_SEED_VERSION = createHash("sha256").update(JSON.stringify(DEMO_VENUES)).digest("base64url").slice(0, 16);
+
 export async function seedDemoVenues(db: Db) {
   // Demo venues have no owner, so they're refreshed from this file whenever it
   // changes: new demo content shows up without resetting the database. Once
   // per version, not on every start (serverless hosts start often).
-  const version = createHash("sha256").update(JSON.stringify(DEMO_VENUES)).digest("base64url").slice(0, 16);
-  const fresh = await db.run("INSERT INTO job_runs (job, key) VALUES ('demo-seed', ?) ON CONFLICT DO NOTHING", version);
+  const fresh = await db.run("INSERT INTO job_runs (job, key) VALUES ('demo-seed', ?) ON CONFLICT DO NOTHING", DEMO_SEED_VERSION);
   if (fresh.changes === 0) return;
   for (const venue of DEMO_VENUES) {
     const { id, shortCode, ...config } = venue;

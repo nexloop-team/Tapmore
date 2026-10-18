@@ -8,6 +8,7 @@ import { currentUser } from "@/server/auth/session";
 import { firstParam } from "@/server/request";
 import { inviteVenueName } from "@/server/services/staff-invites";
 
+
 export const metadata: Metadata = { title: "Create your account" };
 
 export default async function SignupPage({ searchParams }: PageProps<"/signup">) {

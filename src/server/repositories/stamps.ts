@@ -24,18 +24,25 @@ export interface StampEvent {
 
 export async function recordStampEvent(
   db: Db,
-  input: { venueId: string; cardId: string; kind: StampEventKind; delta: number; rewardName?: string | null; deviceId?: string | null },
+  input: { venueId: string; cardId: string; kind: StampEventKind; delta: number; rewardName?: string | null; deviceId?: string | null; requestId?: string | null },
 ): Promise<number> {
   const row = await db.get<{ id: number }>(
-    "INSERT INTO stamp_events (venue_id, card_id, kind, delta, reward_name, device_id) VALUES (?, ?, ?, ?, ?, ?) RETURNING id",
+    "INSERT INTO stamp_events (venue_id, card_id, kind, delta, reward_name, device_id, request_id) VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id",
     input.venueId,
     input.cardId,
     input.kind,
     input.delta,
     input.rewardName ?? null,
     input.deviceId ?? null,
+    input.requestId ?? null,
   );
   return Number(row!.id);
+}
+
+/** This till already made the change `requestId` names: a resend, to be answered, not applied again. */
+export async function requestAlreadyDone(db: Db, deviceId: string, requestId: string | undefined): Promise<boolean> {
+  if (!requestId) return false;
+  return !!(await db.get("SELECT 1 FROM stamp_events WHERE device_id = ? AND request_id = ?", deviceId, requestId));
 }
 
 /** The most recent staff action on a card that can still be undone. */
@@ -61,15 +68,4 @@ export async function markUndone(db: Db, eventId: number) {
 
 export async function recentEvents(cardId: string, limit = 5): Promise<StampEvent[]> {
   return (await (await getDb()).all("SELECT * FROM stamp_events WHERE card_id = ? ORDER BY id DESC LIMIT ?", cardId, limit)) as unknown as StampEvent[];
-}
-
-/** Stamps given by staff and rewards handed out over the last `days` days. */
-/** Stamps given and rewards redeemed since `since` (an ISO timestamp, the start of the stats window). */
-export async function stampActivity(venueId: string, since: string): Promise<{ stampsGiven: number; rewardsRedeemed: number }> {
-  const row = (await (await getDb()).get(
-      `SELECT COALESCE(SUM(CASE WHEN kind = 'stamp' THEN delta END), 0) AS stamps,
-              COUNT(CASE WHEN kind = 'redeem' THEN 1 END) AS redeemed
-         FROM stamp_events
-        WHERE venue_id = ? AND undone_at IS NULL AND created_at >= CAST(? AS TIMESTAMPTZ)`, venueId, since)) as { stamps: number; redeemed: number };
-  return { stampsGiven: row.stamps, rewardsRedeemed: row.redeemed };
 }

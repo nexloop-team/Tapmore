@@ -6,6 +6,6 @@ export const POST = handle(async (request) => {
   assertSameOrigin(request);
   const device = await requireStaffDevice();
   await rateLimitKey(`staff:${device.id}`, 60);
-  const { cardId } = await parseBody(request, staffUndoRequest);
-  return Response.json(await undoLast(device, cardId));
+  const { cardId, requestId } = await parseBody(request, staffUndoRequest);
+  return Response.json(await undoLast(device, cardId, requestId));
 });

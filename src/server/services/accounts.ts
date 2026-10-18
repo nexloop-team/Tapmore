@@ -12,7 +12,7 @@ import {
   destroySession,
 } from "../auth/session";
 import { getDb } from "../db";
-import { ServiceError, rateLimitKey } from "../http";
+import { ServiceError, rateLimitKey, rateLimitMany } from "../http";
 import {
   emailTaken,
   findPasswordHash,
@@ -22,7 +22,8 @@ import {
   updatePasswordHash,
   type User,
 } from "../repositories/users";
-import { deleteVenue, venuesOwnedSolelyBy } from "../repositories/venues";
+import { deleteVenue, membershipsOf, venuesOwnedSolelyBy } from "../repositories/venues";
+import { afterResponse } from "../after";
 import { stopBilling } from "./billing";
 import { sendMail } from "./mailer";
 
@@ -39,21 +40,39 @@ export async function signup(input: z.output<typeof signupRequest>, origin: stri
   if (await emailTaken(input.email)) throw new ServiceError(409, "An account with this email already exists. Try signing in.");
   const user = await insertUser({ email: input.email, name: input.name, passwordHash: await hashPassword(input.password) });
   await createSession(user.id);
-  await sendVerificationEmail(user, origin);
+  // The new owner goes straight on to set up their venue; the email follows.
+  await afterResponse("verification email", () => sendVerificationEmail(user, origin));
   return user;
 }
 
 export async function login(input: z.output<typeof loginRequest>, ip: string): Promise<User> {
-  // Per account and address, so one person can't lock an owner out by
-  // guessing; and a looser cap per account, so a botnet can't grind one password.
-  await rateLimitKey(`login:${input.email}:${ip}`, 10, 15 * 60_000);
-  await rateLimitKey(`login:${input.email}`, 100, 60 * 60_000);
+  // Per address; per account and address, so one person can't lock an owner
+  // out by guessing; and a looser cap per account, so a botnet can't grind
+  // one password. One database write for all three.
+  await rateLimitMany([
+    { key: `login:${ip}`, limit: 20 },
+    { key: `login:${input.email}:${ip}`, limit: 10, windowMs: 15 * 60_000 },
+    { key: `login:${input.email}`, limit: 100, windowMs: 60 * 60_000 },
+  ]);
   const found = await findUserCredentials(input.email);
   const ok = await verifyPassword(input.password, found?.passwordHash ?? (await dummyPasswordHash()));
   if (!found || !ok) throw new ServiceError(401, "That email and password don't match");
   if (found.user.blocked) throw new ServiceError(403, `This account has been blocked. Email ${BRAND.supportEmail} if you think that's a mistake.`);
   await createSession(found.user.id);
   return found.user;
+}
+
+/**
+ * Where a fresh sign-in lands, so it doesn't stop at /dashboard only to be
+ * sent on: the venue last open on this device (if it's one of theirs), or
+ * their only venue. Anything else is for /dashboard to sort out.
+ */
+export async function homeAfterLogin(userId: string, lastVenueId: string | undefined): Promise<string> {
+  const memberships = await membershipsOf(userId);
+  const managed = memberships.filter((m) => m.role !== "staff").map((m) => m.venueId);
+  if (lastVenueId && managed.includes(lastVenueId)) return `/dashboard/${lastVenueId}`;
+  if (managed.length === 1 && memberships.length === 1) return `/dashboard/${managed[0]}`;
+  return "/dashboard";
 }
 
 export async function logout() {
@@ -65,7 +84,8 @@ export async function requestPasswordReset(email: string, origin: string) {
   await rateLimitKey(`reset:${email}`, 3, 15 * 60_000);
   const found = await findUserCredentials(email);
   if (!found || found.user.blocked) return;
-  await sendPasswordResetEmail(found.user, origin);
+  // Sent after the response, so an existing account takes no longer to answer than a missing one.
+  await afterResponse("password reset email", () => sendPasswordResetEmail(found.user, origin));
 }
 
 export async function sendPasswordResetEmail(user: User, origin: string) {

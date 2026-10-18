@@ -8,6 +8,9 @@ import { requireAdminPage } from "@/server/dashboard";
 import { listVenuesForUser } from "@/server/repositories/venues";
 import "@/styles/app.css";
 
+// Blocks on purpose (Cache Components): the console is for operators only, so nothing is shown before the sign-in check.
+export const instant = false;
+
 export const metadata: Metadata = { title: { default: "Admin", template: `%s · Admin · ${BRAND.name}` }, robots: { index: false, follow: false }, manifest: "/brand/app.webmanifest" };
 
 /** Operator console shell. Gated by ADMIN_EMAILS; each page checks again, since layouts don't re-run on client navigation. */

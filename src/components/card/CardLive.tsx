@@ -5,11 +5,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { deviceMemory, storageWorks, subscribeNever } from "@/lib/browser";
-
-const POLL_MS = 5000;
+import { useCardChanges } from "./useCardChanges";
 
 /**
- * The member card's live part: the "Show to staff" code, and a quiet poll
+ * The member card's live part: the "Show to staff" code, and a quiet check
  * that notices stamps added at the till and refreshes the card with a toast.
  */
 export function CardLive({
@@ -44,31 +43,21 @@ export function CardLive({
   // own page shows it from now on instead of the join form.
   useEffect(() => deviceMemory.rememberCard(venueId, { cardId, token }), [venueId, cardId, token]);
 
-  useEffect(() => {
-    if (!qrSvg) return;
-    let stopped = false;
-    async function poll() {
-      if (document.visibilityState !== "visible") return;
-      try {
-        const response = await fetch(`/api/cards/${encodeURIComponent(cardId)}?t=${encodeURIComponent(token)}`, { cache: "no-store" });
-        if (!response.ok || stopped) return;
-        const { stamps: latest } = (await response.json()) as { stamps: number };
-        if (latest === known.current) return;
-        const diff = latest - known.current;
-        known.current = latest;
+  useCardChanges({
+    cardId,
+    token,
+    active: !!qrSvg,
+    knownStamps: stamps,
+    onChange: ({ stamps: latest }) => {
+      const diff = latest - known.current;
+      known.current = latest;
+      if (diff !== 0) {
         setToast(diff > 0 ? labels.added.replace("{count}", String(diff)) : labels.redeemed);
         setTimeout(() => setToast(null), 4000);
-        router.refresh();
-      } catch {
-        /* offline at the till is fine; try again next tick */
       }
-    }
-    const timer = setInterval(poll, POLL_MS);
-    return () => {
-      stopped = true;
-      clearInterval(timer);
-    };
-  }, [cardId, token, qrSvg, labels.added, labels.redeemed, router]);
+      router.refresh();
+    },
+  });
 
   if (!qrSvg) return null;
   return (

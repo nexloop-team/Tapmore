@@ -5,11 +5,13 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent, type ReactNode } from "react";
 import { dashboardApi, errorMessage } from "@/lib/api/dashboard-client";
 import { safeNext } from "@/lib/safe-next";
-import { captchaToken, resetTurnstile, Turnstile } from "./Turnstile";
+import { captchaEnabled, captchaToken, resetTurnstile, Turnstile } from "./Turnstile";
 
 function useSubmit(run: (form: FormData) => Promise<void>) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** The robot check has passed (or there is none): until then the form waits rather than fail. */
+  const [verified, setVerified] = useState(!captchaEnabled);
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPending(true);
@@ -19,10 +21,12 @@ function useSubmit(run: (form: FormData) => Promise<void>) {
     } catch (err) {
       setError(errorMessage(err));
       setPending(false);
+      // Tokens are single-use: a fresh check starts, and the form waits for it again.
+      if (captchaEnabled) setVerified(false);
       resetTurnstile();
     }
   }
-  return { pending, error, onSubmit };
+  return { pending, error, onSubmit, verified, setVerified };
 }
 
 function Input({
@@ -34,6 +38,7 @@ function Input({
   minLength,
   autoFocus,
   placeholder,
+  enterKeyHint = "next",
 }: {
   label: string;
   name: string;
@@ -43,6 +48,8 @@ function Input({
   minLength?: number;
   autoFocus?: boolean;
   placeholder?: string;
+  /** The phone keyboard's Enter key: "next" between fields, "go" or "send" on the last. */
+  enterKeyHint?: "next" | "go" | "send";
 }) {
   const [shown, setShown] = useState(false);
   const password = type === "password";
@@ -50,7 +57,7 @@ function Input({
     <div className="field">
       <label htmlFor={name}>{label}</label>
       <span className={password ? "password-field" : undefined}>
-        <input className="input" id={name} name={name} type={password && shown ? "text" : type} autoComplete={autoComplete} required minLength={minLength} autoFocus={autoFocus} placeholder={placeholder} />
+        <input className="input" id={name} name={name} type={password && shown ? "text" : type} autoComplete={autoComplete} required minLength={minLength} autoFocus={autoFocus} placeholder={placeholder} enterKeyHint={enterKeyHint} />
         {password && (
           <button type="button" className="password-toggle" aria-label={shown ? "Hide password" : "Show password"} aria-pressed={shown} onClick={() => setShown((value) => !value)}>
             {shown ? "Hide" : "Show"}
@@ -62,10 +69,10 @@ function Input({
   );
 }
 
-function Submit({ pending, children }: { pending: boolean; children: ReactNode }) {
+function Submit({ pending, waiting = false, children }: { pending: boolean; waiting?: boolean; children: ReactNode }) {
   return (
-    <button className="btn btn-primary btn-block" type="submit" disabled={pending}>
-      {pending ? "Please wait…" : children}
+    <button className="btn btn-primary btn-block" type="submit" disabled={pending || waiting}>
+      {pending ? "Please wait…" : waiting ? "Checking you're not a robot…" : children}
     </button>
   );
 }
@@ -83,14 +90,14 @@ const text = (form: FormData, key: string) => String(form.get(key) ?? "");
 export function LoginForm({ next }: { next?: string }) {
   const router = useRouter();
   const { pending, error, onSubmit } = useSubmit(async (form) => {
-    await dashboardApi.login({ email: text(form, "email"), password: text(form, "password") });
-    router.replace(safeNext(next));
-    router.refresh();
+    const { home } = await dashboardApi.login({ email: text(form, "email"), password: text(form, "password") });
+    // Straight to their venue, not via /dashboard's redirect.
+    router.replace(next ? safeNext(next) : home);
   });
   return (
     <form onSubmit={onSubmit} noValidate={false}>
       <Input label="Email" name="email" type="email" autoComplete="email" autoFocus />
-      <Input label="Password" name="password" type="password" autoComplete="current-password" />
+      <Input label="Password" name="password" type="password" autoComplete="current-password" enterKeyHint="go" />
       <p className="hint" style={{ marginTop: 8 }}>
         <Link href="/forgot-password">Forgot your password?</Link>
       </p>
@@ -102,19 +109,20 @@ export function LoginForm({ next }: { next?: string }) {
 
 export function SignupForm({ next, staffVenue }: { next?: string; staffVenue?: string | null }) {
   const router = useRouter();
-  const { pending, error, onSubmit } = useSubmit(async (form) => {
+  const { pending, error, onSubmit, verified, setVerified } = useSubmit(async (form) => {
     await dashboardApi.signup({ name: text(form, "name"), email: text(form, "email"), password: text(form, "password"), captchaToken: captchaToken(form) });
     router.replace(safeNext(next, "/onboarding"));
-    router.refresh();
   });
   return (
     <form onSubmit={onSubmit}>
       <Input label="Your name" name="name" autoComplete="name" autoFocus placeholder="Priya Sharma" />
       <Input label="Email" name="email" type="email" autoComplete="email" placeholder="you@yourcafe.in" />
-      <Input label="Password" name="password" type="password" autoComplete="new-password" minLength={8} hint="At least 8 characters." />
-      <Turnstile />
+      <Input label="Password" name="password" type="password" autoComplete="new-password" minLength={8} hint="At least 8 characters." enterKeyHint="go" />
+      <Turnstile onSolved={setVerified} />
       <ErrorNotice error={error} />
-      <Submit pending={pending}>{staffVenue ? "Join and open the till" : "Create my account"}</Submit>
+      <Submit pending={pending} waiting={!verified}>
+        {staffVenue ? "Join and open the till" : "Create my account"}
+      </Submit>
       <p className="hint" style={{ marginTop: 12, textAlign: "center" }}>
         By signing up you agree to our <Link href="/terms">Terms</Link>, <Link href="/privacy">Privacy policy</Link> and{" "}
         <Link href="/refunds">Refund policy</Link>.
@@ -125,7 +133,7 @@ export function SignupForm({ next, staffVenue }: { next?: string; staffVenue?: s
 
 export function ForgotPasswordForm() {
   const [sent, setSent] = useState(false);
-  const { pending, error, onSubmit } = useSubmit(async (form) => {
+  const { pending, error, onSubmit, verified, setVerified } = useSubmit(async (form) => {
     await dashboardApi.forgotPassword({ email: text(form, "email"), captchaToken: captchaToken(form) });
     setSent(true);
   });
@@ -138,10 +146,12 @@ export function ForgotPasswordForm() {
   }
   return (
     <form onSubmit={onSubmit}>
-      <Input label="Email" name="email" type="email" autoComplete="email" autoFocus />
-      <Turnstile />
+      <Input label="Email" name="email" type="email" autoComplete="email" autoFocus enterKeyHint="send" />
+      <Turnstile onSolved={setVerified} />
       <ErrorNotice error={error} />
-      <Submit pending={pending}>Send reset link</Submit>
+      <Submit pending={pending} waiting={!verified}>
+        Send reset link
+      </Submit>
     </form>
   );
 }
@@ -152,12 +162,11 @@ export function ResetPasswordForm({ token }: { token: string }) {
     if (text(form, "password") !== text(form, "confirm")) throw new Error("The two passwords don't match");
     await dashboardApi.resetPassword({ token, password: text(form, "password") });
     router.replace("/dashboard");
-    router.refresh();
   });
   return (
     <form onSubmit={onSubmit}>
       <Input label="New password" name="password" type="password" autoComplete="new-password" minLength={8} hint="At least 8 characters." autoFocus />
-      <Input label="Confirm new password" name="confirm" type="password" autoComplete="new-password" minLength={8} />
+      <Input label="Confirm new password" name="confirm" type="password" autoComplete="new-password" minLength={8} enterKeyHint="go" />
       <ErrorNotice error={error} />
       <Submit pending={pending}>Set new password</Submit>
     </form>

@@ -6,6 +6,9 @@ import { BRAND } from "@/config/brand";
 import { legalDetails, operatedByOther } from "@/config/legal";
 import "@/styles/pages.css";
 
+// Blocks on purpose (Cache Components): the business details come from the server's settings at request time (see config/legal), so a change shows without a rebuild.
+export const instant = false;
+
 export const metadata: Metadata = { title: "Privacy policy" };
 
 /**
@@ -140,6 +143,8 @@ export default async function PrivacyPage() {
         <li>Bot protection on sign-up (Cloudflare Turnstile)</li>
         <li>AI for owners: reading menu photos, and summarising a week&apos;s feedback notes (the note text only, never who wrote it)</li>
         {process.env.GOOGLE_NL_API_KEY && <li>Judging the tone of feedback notes (Google Cloud Natural Language; the text only, never who wrote it)</li>}
+        {process.env.VERCEL && <li>Measuring how fast pages load (our cloud provider; timings and the kind of device, no cookies, nothing that identifies you)</li>}
+        {process.env.SENTRY_DSN && <li>Error reports, so we can fix faults (Sentry; technical details of the fault, never guests&apos; notes or contact details)</li>}
       </ul>
       <p>We don&apos;t sell personal data or share it for advertising. We disclose it to authorities only when the law requires.</p>
 

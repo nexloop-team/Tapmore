@@ -6,6 +6,9 @@ import { BRAND } from "@/config/brand";
 import { legalDetails } from "@/config/legal";
 import "@/styles/pages.css";
 
+// Blocks on purpose (Cache Components): the business details come from the server's settings at request time (see config/legal), so a change shows without a rebuild.
+export const instant = false;
+
 export const metadata: Metadata = { title: "Delivery policy" };
 
 /** Razorpay asks every merchant for a shipping/delivery policy; for an online service it says how access is delivered. */

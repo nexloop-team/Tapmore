@@ -2,6 +2,8 @@ export type EventParams = Record<string, string | number | boolean | null>;
 export type Track = (name: string, params?: EventParams) => void;
 
 const VISIT_KEY = "tt_visit";
+/** Events per beacon (the server takes up to 20). */
+const MAX_BATCH = 20;
 const VISIT_IDLE_MS = 30 * 60 * 1000;
 let fallbackVisit: string | null = null;
 
@@ -23,11 +25,31 @@ function visitId(): string {
   }
 }
 
+type QueuedEvent = { name: string; params: EventParams };
+let queue: QueuedEvent[] = [];
+
+/** Sends what's queued as one beacon (one request, one database write). */
+function flush() {
+  if (queue.length === 0) return;
+  const events = queue;
+  queue = [];
+  try {
+    const body = JSON.stringify({ events });
+    if (!navigator.sendBeacon?.("/api/events", new Blob([body], { type: "application/json" }))) {
+      void fetch("/api/events", { method: "POST", headers: { "Content-Type": "application/json" }, body, keepalive: true }).catch(() => {});
+    }
+  } catch {
+    /* analytics must never break the page */
+  }
+}
+
 /**
  * First-party analytics: every event carries the venue, the scan source and a
  * visit id (see visitId), and is delivered with sendBeacon so it survives
- * the tap that navigates away. Booleans are sent as 1/0 so they aggregate as
- * numbers in any warehouse.
+ * the tap that navigates away. Events tracked together (a page opening, a
+ * tap and what it opens) go out as one beacon, sent before the browser does
+ * anything else. Booleans are sent as 1/0 so they aggregate as numbers in
+ * any warehouse.
  */
 export function createTracker(base: { venueId: string | null; source: string; page: string; team?: boolean }): Track {
   return (name, params = {}) => {
@@ -39,13 +61,7 @@ export function createTracker(base: { venueId: string | null; source: string; pa
       if (typeof payload[key] === "boolean") payload[key] = payload[key] ? 1 : 0;
     }
     if (process.env.NODE_ENV !== "production") console.debug(`[analytics] ${name}`, payload);
-    try {
-      const body = JSON.stringify({ name, params: payload });
-      if (!navigator.sendBeacon?.("/api/events", new Blob([body], { type: "application/json" }))) {
-        void fetch("/api/events", { method: "POST", headers: { "Content-Type": "application/json" }, body, keepalive: true }).catch(() => {});
-      }
-    } catch {
-      /* analytics must never break the page */
-    }
+    if (queue.push({ name, params: payload }) === 1) queueMicrotask(flush);
+    if (queue.length >= MAX_BATCH) flush();
   };
 }

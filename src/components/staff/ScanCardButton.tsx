@@ -1,9 +1,10 @@
 "use client";
 
-import jsQR from "jsqr";
-import { Camera, ScanLine, X } from "lucide-react";
+import { Camera, Loader2, ScanLine, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { dashboardApi, errorMessage } from "@/lib/api/dashboard-client";
+import { useShowCard } from "./till-card";
 
 /** A member card's staff code: `…/staff/stamp?c=crd_…`. */
 function cardIdFromQr(text: string): string | null {
@@ -19,16 +20,60 @@ function cardIdFromQr(text: string): string | null {
 const SCAN_WIDTH = 640;
 const SCAN_EVERY_MS = 150;
 
+type Reader = (video: HTMLVideoElement) => Promise<string | null>;
+
+interface NativeBarcodeDetector {
+  detect(source: HTMLVideoElement): Promise<{ rawValue: string }[]>;
+}
+type BarcodeDetectorClass = (new (options: { formats: string[] }) => NativeBarcodeDetector) & { getSupportedFormats(): Promise<string[]> };
+
+/**
+ * The phone's own QR reader when it has one (Android Chrome: fast, and easy
+ * on the battery); otherwise jsQR, downloaded only now that the camera is
+ * open, reading a scaled-down frame.
+ */
+async function qrReader(): Promise<Reader> {
+  const Native = (window as Window & { BarcodeDetector?: BarcodeDetectorClass }).BarcodeDetector;
+  if (Native) {
+    try {
+      if ((await Native.getSupportedFormats()).includes("qr_code")) {
+        const detector = new Native({ formats: ["qr_code"] });
+        return async (video) => (await detector.detect(video))[0]?.rawValue ?? null;
+      }
+    } catch {
+      /* fall through to jsQR */
+    }
+  }
+  const jsQR = (await import("jsqr")).default;
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  return async (video) => {
+    if (!context) return null;
+    const scale = Math.min(1, SCAN_WIDTH / video.videoWidth);
+    canvas.width = Math.round(video.videoWidth * scale);
+    canvas.height = Math.round(video.videoHeight * scale);
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
+    return jsQR(context.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height, { inversionAttempts: "dontInvert" })?.data ?? null;
+  };
+}
+
 /**
  * Scans a guest's card code with the device camera, right in the staff page,
- * so staff never leave it for the camera app. Opens the stamp screen for
- * the card it finds.
+ * so staff never leave it for the camera app. The card it finds opens on the
+ * till straight away ("Opening card…" while it loads), with no page load.
  */
 export function ScanCardButton({ label = "Scan a card", variant = "primary" }: { label?: string; variant?: "hero" | "primary" | "secondary" }) {
   const router = useRouter();
+  const showCard = useShowCard();
   const [open, setOpen] = useState(false);
+  /** Bumped to start the camera again after a card couldn't be opened. */
+  const [attempt, setAttempt] = useState(0);
+  const [opening, setOpening] = useState(false);
+  /** The card couldn't be opened (another venue's, deleted, offline): offer to scan again. */
+  const [cardFailed, setCardFailed] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const video = useRef<HTMLVideoElement>(null);
+  const closeButton = useRef<HTMLButtonElement>(null);
   const stream = useRef<MediaStream | null>(null);
   const frame = useRef<number | null>(null);
 
@@ -42,14 +87,48 @@ export function ScanCardButton({ label = "Scan a card", variant = "primary" }: {
   const close = useCallback(() => {
     stop();
     setOpen(false);
+    setOpening(false);
   }, [stop]);
+
+  // Escape closes, and focus starts on Close so a keyboard or switch user can leave.
+  useEffect(() => {
+    if (!open) return;
+    closeButton.current?.focus();
+    const onKey = (event: KeyboardEvent) => event.key === "Escape" && close();
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, close]);
+
+  const found = useCallback(
+    async (cardId: string) => {
+      navigator.vibrate?.(60);
+      stop();
+      if (!showCard) {
+        setOpen(false);
+        router.push(`/staff/stamp?c=${cardId}`);
+        return;
+      }
+      setOpening(true);
+      setMessage("Opening card…");
+      try {
+        const card = await dashboardApi.staffCard(cardId);
+        setOpen(false);
+        setOpening(false);
+        showCard(card);
+      } catch (error) {
+        setOpening(false);
+        setCardFailed(true);
+        setMessage(errorMessage(error));
+      }
+    },
+    [router, showCard, stop],
+  );
 
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    const canvas = document.createElement("canvas");
-    const context = canvas.getContext("2d", { willReadFrequently: true });
     let lastScan = 0;
+    let reading = false;
 
     async function start() {
       setMessage("Point the camera at the guest's card code.");
@@ -58,14 +137,15 @@ export function ScanCardButton({ label = "Scan a card", variant = "primary" }: {
         return;
       }
       try {
-        const media = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
+        const [media, read] = await Promise.all([navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false }), qrReader()]);
         if (cancelled) return media.getTracks().forEach((track) => track.stop());
         stream.current = media;
         const element = video.current!;
         element.srcObject = media;
         await element.play();
-        tick();
+        tick(read);
       } catch (error) {
+        if (cancelled) return;
         const name = error instanceof DOMException ? error.name : "";
         setMessage(
           name === "NotAllowedError"
@@ -75,27 +155,25 @@ export function ScanCardButton({ label = "Scan a card", variant = "primary" }: {
       }
     }
 
-    function tick() {
-      frame.current = requestAnimationFrame(tick);
+    function tick(read: Reader) {
+      frame.current = requestAnimationFrame(() => tick(read));
       const element = video.current;
       const now = performance.now();
-      if (!element || !context || element.readyState < 2 || now - lastScan < SCAN_EVERY_MS) return;
+      if (reading || !element || element.readyState < 2 || now - lastScan < SCAN_EVERY_MS) return;
       lastScan = now;
-      const scale = Math.min(1, SCAN_WIDTH / element.videoWidth);
-      canvas.width = Math.round(element.videoWidth * scale);
-      canvas.height = Math.round(element.videoHeight * scale);
-      context.drawImage(element, 0, 0, canvas.width, canvas.height);
-      const found = jsQR(context.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height, { inversionAttempts: "dontInvert" });
-      if (!found?.data) return;
-      const cardId = cardIdFromQr(found.data);
-      if (!cardId) {
-        setMessage("That's not a member card code. Ask the guest to tap “Show to staff” on their card.");
-        return;
-      }
-      navigator.vibrate?.(60);
-      stop();
-      setOpen(false);
-      router.push(`/staff/stamp?c=${cardId}`);
+      reading = true;
+      read(element)
+        .then((text) => {
+          if (cancelled || !text) return;
+          const cardId = cardIdFromQr(text);
+          if (!cardId) return setMessage("That's not a member card code. Ask the guest to tap “Show to staff” on their card.");
+          cancelled = true;
+          void found(cardId);
+        })
+        .catch(() => {})
+        .finally(() => {
+          reading = false;
+        });
     }
 
     void start();
@@ -103,11 +181,19 @@ export function ScanCardButton({ label = "Scan a card", variant = "primary" }: {
       cancelled = true;
       stop();
     };
-  }, [open, router, stop]);
+  }, [open, attempt, found, stop]);
 
   return (
     <>
-      <button type="button" className={`staff-btn staff-btn-${variant}`} onClick={() => setOpen(true)}>
+      <button
+        type="button"
+        className={`staff-btn staff-btn-${variant}`}
+        onClick={() => {
+          setOpening(false);
+          setCardFailed(false);
+          setOpen(true);
+        }}
+      >
         {variant === "hero" ? <ScanLine aria-hidden strokeWidth={1.7} /> : <Camera aria-hidden />}
         <span>{label}</span>
       </button>
@@ -116,9 +202,21 @@ export function ScanCardButton({ label = "Scan a card", variant = "primary" }: {
           <video ref={video} className="scanner-video" playsInline muted />
           <div className="scanner-frame" aria-hidden />
           <p className="scanner-message" role="status">
-            {message}
+            {opening && <Loader2 className="spin" aria-hidden />} {message}
           </p>
-          <button type="button" className="btn scanner-close" onClick={close}>
+          {cardFailed && (
+            <button
+              type="button"
+              className="btn scanner-again"
+              onClick={() => {
+                setCardFailed(false);
+                setAttempt((n) => n + 1);
+              }}
+            >
+              <Camera aria-hidden /> Scan again
+            </button>
+          )}
+          <button ref={closeButton} type="button" className="btn scanner-close" onClick={close}>
             <X aria-hidden /> Close
           </button>
         </div>

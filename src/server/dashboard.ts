@@ -55,14 +55,13 @@ async function describeWrite(request: Request, venueId: string): Promise<string>
 /** Server pages under /dashboard/[venueId]: the venue with its subscription, or a 404 for anyone else. */
 export const loadDashboardVenue = cache(async (venueId: string) => {
   const user = await requireUser();
-  const venue = await getVenueRecord(venueId);
+  // Side by side; nothing is shown until the checks below pass.
+  const [venue, role, subscription] = await Promise.all([getVenueRecord(venueId), venueRole(user.id, venueId), getSubscription(venueId)]);
   if (!venue) notFound();
-  const role = await venueRole(user.id, venueId);
   // Staff logins only reach the till; their list of venues says so.
   if (role === "staff" && !isAdmin(user)) redirect("/dashboard");
   if (!isManagerRole(role) && !isAdmin(user)) notFound();
-  const subscription = await getSubscription(venue.id);
-  return { user, venue, subscription, access: accessState(subscription) };
+  return { user, venue, role, subscription, access: accessState(subscription) };
 });
 
 /** Admin API routes. */

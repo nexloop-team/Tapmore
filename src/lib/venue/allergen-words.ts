@@ -1,4 +1,4 @@
-import { ALLERGENS } from "./schema";
+import { ALLERGENS } from "./constants";
 
 type Allergen = (typeof ALLERGENS)[number];
 

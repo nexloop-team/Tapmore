@@ -1,7 +1,6 @@
 "use client";
 
 import { Loader2, Mail, Trash2, UserRound } from "lucide-react";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { dashboardApi, errorMessage } from "@/lib/api/dashboard-client";
 import { formatDate } from "@/lib/format";
@@ -22,13 +21,15 @@ interface StaffMemberView {
  * the guest list.
  */
 export function StaffMembers({ venueId, members }: { venueId: string; members: StaffMemberView[] }) {
-  const router = useRouter();
   const ask = useConfirm();
   const toast = useToast();
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState<{ email: string; url: string } | null>(null);
+  /** Removed here: gone from the list at once, without fetching the page again. */
+  const [removed, setRemoved] = useState<string[]>([]);
+  const listed = members.filter((member) => !removed.includes(member.userId));
 
   async function invite() {
     setBusy(true);
@@ -55,7 +56,7 @@ export function StaffMembers({ venueId, members }: { venueId: string; members: S
     try {
       await dashboardApi.removeStaff(venueId, member.userId);
       toast({ text: `${member.name || member.email} can no longer open the till.` });
-      router.refresh();
+      setRemoved((ids) => [...ids, member.userId]);
     } catch (err) {
       setError(errorMessage(err));
     }
@@ -63,9 +64,9 @@ export function StaffMembers({ venueId, members }: { venueId: string; members: S
 
   return (
     <Card id="staff" title="Staff logins" description="Give each team member their own login. It only opens the till: no dashboard, billing or guest list.">
-      {members.length > 0 && (
+      {listed.length > 0 && (
         <div className="list-editor" style={{ marginBottom: 14 }}>
-          {members.map((member) => (
+          {listed.map((member) => (
             <div key={member.userId} className="list-row">
               <div className="list-row-head">
                 <UserRound size={18} aria-hidden />
