@@ -4,8 +4,9 @@ import { BRAND } from "./brand";
  * The business behind Tapmore, as the legal pages and the Contact page
  * print it. Indian law expects these on the site: the Consumer Protection
  * (E-Commerce) Rules 2020 (legal name, address, contact details) and the
- * DPDP Act 2023, and Razorpay checks them before activating payments. (A
- * named Grievance Officer is left out for now: owner's decision, 2026-10-09.)
+ * DPDP Act 2023, and Razorpay checks them before activating payments. A
+ * named Grievance Officer shows on the Contact and privacy pages once
+ * GRIEVANCE_OFFICER_NAME is set; startup warns until it is.
  *
  * Read at request time, so a change of environment needs a restart, not a
  * rebuild. Startup warns in production while any required one is missing,
@@ -34,6 +35,8 @@ interface LegalDetails {
   /** e.g. "Monday to Saturday, 10 am to 6 pm IST". */
   supportHours: string;
   gstin: string | null;
+  /** The person complaints go to, as the E-Commerce Rules and DPDP Rules expect; their email defaults to the support address. */
+  grievanceOfficer: { name: string; email: string } | null;
 }
 
 const REQUIRED = {
@@ -49,6 +52,7 @@ export function legalDetails(): LegalDetails {
   const env = (key: keyof typeof REQUIRED) => process.env[key]?.trim() || missing(REQUIRED[key]);
   const entityName = env("LEGAL_ENTITY_NAME");
   const entityType = process.env.LEGAL_ENTITY_TYPE?.trim() || null;
+  const grievanceName = process.env.GRIEVANCE_OFFICER_NAME?.trim();
   return {
     entityName,
     entityType,
@@ -60,6 +64,7 @@ export function legalDetails(): LegalDetails {
     supportPhone: env("SUPPORT_PHONE"),
     supportHours: process.env.SUPPORT_HOURS?.trim() || "Monday to Saturday, 10 am to 6 pm IST",
     gstin: process.env.GSTIN?.trim() || null,
+    grievanceOfficer: grievanceName ? { name: grievanceName, email: process.env.GRIEVANCE_OFFICER_EMAIL?.trim() || BRAND.supportEmail } : null,
   };
 }
 

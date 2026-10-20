@@ -14,8 +14,7 @@ export const metadata: Metadata = { title: "Contact us" };
 /**
  * The business's contact details, as the Consumer Protection (E-Commerce)
  * Rules 2020 and the DPDP Act ask, and as Razorpay checks before activating
- * payments. A named Grievance Officer is left out for now (owner's decision,
- * 2026-10-09); add one before launch.
+ * payments. The Grievance Officer shows once GRIEVANCE_OFFICER_NAME is set.
  */
 export default async function ContactPage() {
   await connection();
@@ -61,6 +60,15 @@ export default async function ContactPage() {
         30 days. If you&apos;re not satisfied with our answer on a personal-data complaint, you can complain to the Data Protection Board of
         India. See also our <Link href="/privacy">privacy policy</Link> and <Link href="/refunds">refund policy</Link>.
       </p>
+      {legal.grievanceOfficer && (
+        <p>
+          Grievance Officer: {legal.grievanceOfficer.name}
+          <br />
+          Email: <a href={`mailto:${legal.grievanceOfficer.email}`}>{legal.grievanceOfficer.email}</a>
+          <br />
+          Address: {legal.address}
+        </p>
+      )}
     </LegalPage>
   );
 }

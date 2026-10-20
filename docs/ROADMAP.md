@@ -48,6 +48,8 @@ These are must-haves. Without them the product is not ready to demo or sell.
 
 ## 2. Launch setup: business and operations
 
+> Free pilot with 20–30 cafés first, then the paid launch: [LAUNCH-CHECKLIST.md](LAUNCH-CHECKLIST.md).
+
 - [ ] Decide the brand name and buy the domain (`.com` or `.co.uk`).
 - [ ] Set up a professional email address (Google Workspace or similar) and a UK virtual phone number.
 - [ ] **Deploy on Railway** (or Render, Fly.io or a VPS):

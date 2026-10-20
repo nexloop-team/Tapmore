@@ -92,6 +92,7 @@ When a venue has neither a paid subscription nor trial days left, its guest page
 | `LEGAL_ENTITY_NAME`, `LEGAL_ENTITY_TYPE` | The business that runs Tapmore, e.g. `Tapmore` + `a partnership firm`. Shown in the legal fine print, the Contact page and on payments (required in production) |
 | `LEGAL_REGISTRATION` | Optional: Udyam number, firm registration, or later CIN / LLPIN, printed next to the business name |
 | `SUPPORT_HOURS`, `GSTIN` | Optional: support hours (default Mon–Sat 10–6 IST), GSTIN once registered |
+| `GRIEVANCE_OFFICER_NAME`, `GRIEVANCE_OFFICER_EMAIL` | The Grievance Officer named on the Contact and privacy pages (email defaults to the support address); startup warns until set |
 | `DATABASE_URL` | PostgreSQL connection string (Supabase, Neon, RDS, self-hosted). Without it, an embedded Postgres in `DATA_DIR/pg` is used |
 | `DATABASE_SSL` | `off` for a server without TLS (localhost is detected automatically); `verify` to check a publicly signed certificate |
 | `DATABASE_SSL_CA` | The database's CA certificate (PEM text or file path), so its identity is checked |

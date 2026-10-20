@@ -173,6 +173,13 @@ export default async function PrivacyPage() {
         Email <a href={`mailto:${legal.supportEmail}`}>{legal.supportEmail}</a>. We acknowledge complaints within 48 hours and resolve them
         within 30 days. See also <Link href="/contact">Contact us</Link>.
       </p>
+      {legal.grievanceOfficer && (
+        <p>
+          Our Grievance Officer is {legal.grievanceOfficer.name} (
+          <a href={`mailto:${legal.grievanceOfficer.email}`}>{legal.grievanceOfficer.email}</a>), who also answers questions about how we
+          handle personal data.
+        </p>
+      )}
 
       <h2>Changes</h2>
       <p>

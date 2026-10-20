@@ -48,6 +48,7 @@ function productionConfigProblems(env: NodeJS.ProcessEnv = process.env): ConfigP
 
   const legal = missingLegalDetails();
   if (legal.length) error(`Business details for the legal and contact pages are missing: ${legal.join(", ")}. Razorpay and Indian consumer law require them.`);
+  if (!has("GRIEVANCE_OFFICER_NAME")) warn("GRIEVANCE_OFFICER_NAME is not set: the Contact and privacy pages name no Grievance Officer, which Indian e-commerce and data rules expect.");
   return problems;
 }
 
