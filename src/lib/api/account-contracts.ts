@@ -37,6 +37,15 @@ export type UpdateVenueRequest = z.input<typeof updateVenueRequest>;
 
 export const deleteVenueRequest = z.object({ confirmName: z.string().max(200) });
 
+/** Google review replies: reviews are named by Google's full id ("accounts/1/locations/2/reviews/abc"). */
+const googleReviewId = z.string().trim().regex(/^accounts\/[\w-]+\/locations\/[\w-]+\/reviews\/[\w-]+$/, "Unknown review");
+export const reviewReplyRequest = z.object({ reviewId: googleReviewId, text: z.string().trim().min(1, "Write a reply first").max(1500, "Keep replies under 1,500 characters") });
+export type ReviewReplyRequest = z.input<typeof reviewReplyRequest>;
+export const reviewIdRequest = z.object({ reviewId: googleReviewId });
+export type ReviewIdRequest = z.input<typeof reviewIdRequest>;
+export const reviewLocationRequest = z.object({ account: z.string().regex(/^accounts\/[\w-]+$/), location: z.string().regex(/^locations\/[\w-]+$/) });
+export type ReviewLocationRequest = z.input<typeof reviewLocationRequest>;
+
 export const explainDishesRequest = z.object({
   items: z
     .array(z.object({ id: z.string().trim().min(1).max(40), name: z.string().trim().min(1).max(120), description: z.string().trim().max(500).nullish() }))

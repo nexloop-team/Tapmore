@@ -30,7 +30,7 @@ const FEATURES = [
   { icon: Wifi, tint: "green", title: "Wi-Fi without the questions", text: "Guests copy the password in one tap. Ask for an email first if you like." },
   { icon: Heart, tint: "rose", title: "A stamp card nobody loses", text: "Digital stamps, rewards and birthday treats. Staff stamp from any phone." },
   { icon: MessageCircle, tint: "blue", title: "Hear it first", text: "Guests tell you what went wrong in private, before it becomes a public review." },
-  { icon: Star, tint: "amber", title: "More Google reviews", text: "Every guest gets a friendly invite to review you, the way Google allows." },
+  { icon: Star, tint: "amber", title: "More Google reviews, all answered", text: "Guests get a friendly invite to review you. Connect Google and every review gets a reply in your name." },
   { icon: Users, tint: "purple", title: "Know your regulars", text: "See who visits and how often. Export your guest list whenever you need it." },
   { icon: Printer, tint: "teal", title: "Print and you're done", text: "Table cards print at home. See which tables scan the most." },
   { icon: Palette, tint: "clay", title: "Looks like your place", text: `Your colour, your logo, your fonts. No ${BRAND.name} logo on your page.` },
@@ -56,6 +56,10 @@ const FAQS = [
   {
     q: "What happens after the 7-day trial?",
     a: "Subscribe to keep your page live. If you don't, it pauses and guests see a friendly “back soon” page. Your menu, guests and stamp cards stay safe, and everything comes back the moment you subscribe.",
+  },
+  {
+    q: "How do Google review replies work?",
+    a: `Connect your Google Business Profile once from the dashboard. ${BRAND.name} then shows your Google reviews with a reply ready: replies to 4–5★ reviews can go out automatically, and 1–3★ ones wait for you to check. They appear on Google as the owner's response. ${BRAND.name} only reads your reviews and posts the replies you allow, and you can disconnect any time.`,
   },
   { q: "How do I pay?", a: `Through Razorpay, with UPI, a card or netbanking. It's ${priceSentence()}, for each venue.` },
   {

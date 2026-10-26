@@ -16,6 +16,15 @@ export const venueSettingsSchema = z.object({
     /** The birthday reward (what members get, in the owner's words) and its birthday-wish email. */
     birthday: z.object({ enabled: z.boolean(), offer: z.string().trim().max(200) }),
   }),
+  /** Google review replies (once the venue has connected its Google Business Profile). */
+  reviews: z.object({
+    /** 4-5 star reviews get an AI reply posted straight away; off: they wait for approval. */
+    autoReply: z.boolean(),
+    /** The same for 1-3 star reviews; off (the default): they wait for approval with a reply drafted. */
+    autoReplyCritical: z.boolean(),
+    /** Optional last line of every reply, e.g. "Team Juniper". */
+    signOff: z.string().trim().max(60),
+  }),
 });
 
 export type VenueSettings = z.output<typeof venueSettingsSchema>;
@@ -25,6 +34,7 @@ export const DEFAULT_SETTINGS: VenueSettings = {
   automations: {
     birthday: { enabled: false, offer: "" },
   },
+  reviews: { autoReply: true, autoReplyCritical: false, signOff: "" },
 };
 
 /** Saved settings over the defaults, section by section, so new fields get sensible values. */
@@ -35,6 +45,7 @@ export function resolveSettings(raw: unknown): VenueSettings {
     automations: {
       birthday: { ...DEFAULT_SETTINGS.automations.birthday, ...(saved.automations?.birthday as object | undefined) },
     },
+    reviews: { ...DEFAULT_SETTINGS.reviews, ...saved.reviews },
   };
   const result = venueSettingsSchema.safeParse(merged);
   return result.success ? result.data : DEFAULT_SETTINGS;
@@ -44,6 +55,7 @@ export function resolveSettings(raw: unknown): VenueSettings {
 export const venueSettingsPatch = z.object({
   stampPolicy: venueSettingsSchema.shape.stampPolicy.partial().optional(),
   automations: venueSettingsSchema.shape.automations.partial().optional(),
+  reviews: venueSettingsSchema.shape.reviews.partial().optional(),
 });
 
 /** The saved settings with a patch applied field by field inside each section. */
@@ -51,6 +63,7 @@ export function applySettingsPatch(current: VenueSettings, patch: z.output<typeo
   return {
     stampPolicy: { ...current.stampPolicy, ...stripUndefined(patch.stampPolicy) },
     automations: { ...current.automations, ...stripUndefined(patch.automations) },
+    reviews: { ...current.reviews, ...stripUndefined(patch.reviews) },
   };
 }
 

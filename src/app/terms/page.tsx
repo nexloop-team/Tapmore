@@ -33,8 +33,9 @@ export default async function TermsPage() {
       <h2>1. The service</h2>
       <p>
         {BRAND.name} gives cafés, restaurants and bars a guest page that table QR codes open: a menu, Wi-Fi details, a digital loyalty card,
-        a private feedback box and a Google review link, with a dashboard to manage them, a guest list and automatic emails. We may improve or
-        change features; we won&apos;t remove a core feature you pay for during your paid year without telling you first.
+        a private feedback box and a Google review link, with a dashboard to manage them, a guest list and automatic emails. If you connect your
+        Google Business Profile, {BRAND.name} reads its reviews and posts the replies you approve or have switched on, in your business&apos;s name;
+        you&apos;re responsible for those replies, and can edit or remove them on Google. We may improve or change features; we won&apos;t remove a core feature you pay for during your paid year without telling you first.
       </p>
 
       <h2>2. Your account</h2>

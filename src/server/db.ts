@@ -316,6 +316,41 @@ const MIGRATIONS: string[] = [
   // carries the same request id, and is recognised as done rather than repeated.
   `ALTER TABLE stamp_events ADD COLUMN request_id TEXT;
    CREATE UNIQUE INDEX stamp_events_request ON stamp_events(device_id, request_id) WHERE request_id IS NOT NULL;`,
+  // Google review replies: a venue's link to its Google Business Profile (the
+  // refresh token sealed, see crypto.ts) and the reviews read from it. Both go
+  // when the owner disconnects or the venue is deleted.
+  `CREATE TABLE google_connections (
+     venue_id TEXT PRIMARY KEY REFERENCES venues(id) ON DELETE CASCADE,
+     account_name TEXT,
+     location_name TEXT,
+     location_title TEXT,
+     refresh_token_enc TEXT NOT NULL,
+     connected_by TEXT,
+     connected_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+     status TEXT NOT NULL DEFAULT 'choose_location',
+     last_synced_at TIMESTAMPTZ,
+     last_error TEXT
+   );
+   CREATE INDEX google_connections_location ON google_connections(location_name);
+   ALTER TABLE google_connections ENABLE ROW LEVEL SECURITY;
+   CREATE TABLE google_reviews (
+     id TEXT PRIMARY KEY,
+     venue_id TEXT NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
+     reviewer_name TEXT,
+     stars INTEGER NOT NULL,
+     comment TEXT,
+     review_time TIMESTAMPTZ NOT NULL,
+     update_time TIMESTAMPTZ NOT NULL,
+     reply_text TEXT,
+     reply_time TIMESTAMPTZ,
+     state TEXT NOT NULL,
+     draft_text TEXT,
+     posted_by TEXT,
+     imported INTEGER NOT NULL DEFAULT 0
+   );
+   CREATE INDEX google_reviews_venue ON google_reviews(venue_id, review_time DESC);
+   CREATE INDEX google_reviews_awaiting ON google_reviews(venue_id) WHERE state = 'awaiting';
+   ALTER TABLE google_reviews ENABLE ROW LEVEL SECURITY;`,
 ];
 
 /** "2026-10-09 13:05:00.123+00" → "2026-10-09T13:05:00.123Z": ISO in UTC, so Date.parse reads it right anywhere. */

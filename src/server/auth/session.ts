@@ -112,7 +112,7 @@ export function isAdmin(user: User | null): boolean {
   return !!user && user.emailVerified && (user.adminRole || isSuperAdmin(user));
 }
 
-type AuthTokenPurpose = "verify_email" | "reset_password";
+type AuthTokenPurpose = "verify_email" | "reset_password" | "google_connect";
 
 /** One-time link tokens (email verification, password reset); stored hashed like sessions. */
 export async function createAuthToken(userId: string, purpose: AuthTokenPurpose, ttlMinutes: number): Promise<string> {

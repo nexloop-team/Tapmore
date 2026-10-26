@@ -40,6 +40,12 @@ function productionConfigProblems(env: NodeJS.ProcessEnv = process.env): ConfigP
   if (razorpay.length === 3) warn("Razorpay is not set up, so owners can't pay. The Subscription page asks them to email support.");
   else if (razorpay.length) error(`Razorpay is half set up: ${razorpay.join(", ")} missing.`);
   if (razorpay.length < 3 && !has("RAZORPAY_WEBHOOK_SECRET")) error("RAZORPAY_WEBHOOK_SECRET is not set: renewals, failed payments and cancellations won't reach the app.");
+
+  const google = ["GOOGLE_OAUTH_CLIENT_ID", "GOOGLE_OAUTH_CLIENT_SECRET", "TOKEN_ENCRYPTION_KEY"].filter((key) => !has(key));
+  if (google.length && google.length < 3) error(`Google review replies are half set up: ${google.join(", ")} missing.`);
+  if (google.length === 0 && (!has("GOOGLE_PUBSUB_TOPIC") || !has("GOOGLE_PUSH_TOKEN"))) {
+    warn("GOOGLE_PUBSUB_TOPIC / GOOGLE_PUSH_TOKEN aren't set: new Google reviews are only picked up by the daily check, not within minutes.");
+  }
   if (env.BILLING_DEV_MODE === "1") error("BILLING_DEV_MODE=1: anyone can switch a venue to paid without paying. Staging only.");
 
   if (!has("ADMIN_EMAILS")) warn("ADMIN_EMAILS is not set, so nobody can open /admin.");

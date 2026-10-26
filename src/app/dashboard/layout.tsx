@@ -8,6 +8,7 @@ import { BRAND } from "@/config/brand";
 import { isAdmin, requireUser } from "@/server/auth/session";
 import { accessBadge } from "@/lib/plans";
 import { listVenueSummariesForUser } from "@/server/repositories/venues";
+import { googleConfigured } from "@/server/services/google";
 import "@/styles/app.css";
 
 // Blocks on purpose (Cache Components): the sidebar is the signed-in owner's venues; until we know who's asking there's nothing to show but the page's own loading placeholder.
@@ -30,11 +31,12 @@ export default async function DashboardLayout({ children }: { children: ReactNod
     name: venue.name,
     planLabel: accessBadge(venue.subscription).label,
     unreadFeedback: venue.unreadFeedback,
+    awaitingReviews: venue.awaitingReviews,
     logoUrl: venue.logoUrl,
   }));
   return (
     <div className={`app ${uiFont.variable}`}>
-      <AppShell mode="venue" venues={venues} user={{ name: user.name, email: user.email, isAdmin: isAdmin(user) }} lastVenueId={(await cookies()).get("tt_venue")?.value ?? null}>
+      <AppShell mode="venue" venues={venues} reviews={googleConfigured()} user={{ name: user.name, email: user.email, isAdmin: isAdmin(user) }} lastVenueId={(await cookies()).get("tt_venue")?.value ?? null}>
         {children}
       </AppShell>
       <AppServiceWorker scope="/dashboard" />

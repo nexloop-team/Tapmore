@@ -80,7 +80,12 @@ When a venue has neither a paid subscription nor trial days left, its guest page
    - **Page speed on real phones:** in Vercel, open the project → Speed Insights → Enable. The pages already send the figures (loading, responsiveness, layout shift; route shapes only, never addresses with their tokens).
    - **Errors and traces:** create a Sentry project and set `SENTRY_DSN` (optionally `SENTRY_TRACES_SAMPLE_RATE`, default 0.1). Server only: query strings, cookies, headers and request bodies are stripped before anything is sent.
    - **Where an API call's time goes:** every API response carries a `Server-Timing` header (database time, query count, total), shown in the browser's network panel.
-9. **Check the log after the first start.** In production the server lists every setting a launch still needs ([env-check.ts](src/server/env-check.ts)).
+9. **Google review replies (optional).** Owners connect their Google Business Profile once; Tapmore then picks up new reviews, posts AI replies to 4–5★ ones (owners can switch that off) and drafts replies to 1–3★ ones for approval (or posts them too, if the owner switches that on). Owners never touch Google Cloud: the keys are only in the server's env.
+   1. The Cloud project needs Business Profile API access (granted per project by Google). Enable the Google My Business, My Business Account Management, Business Information and Notifications APIs, and Cloud Pub/Sub.
+   2. Google Auth Platform: External app named Tapmore with `https://www.googleapis.com/auth/business.manage`, and a Web client whose redirect URI is `https://<your-domain>/api/google/callback`. Set `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, and `TOKEN_ENCRYPTION_KEY` (`openssl rand -base64 32`; changing it disconnects every venue).
+   3. For alerts within minutes: a Pub/Sub topic with `mybusiness-api-pubsub@system.gserviceaccount.com` as Publisher, and a push subscription to `https://<your-domain>/api/google/notifications?token=<GOOGLE_PUSH_TOKEN>`. Set `GOOGLE_PUBSUB_TOPIC` (`projects/<project>/topics/<topic>`) and `GOOGLE_PUSH_TOKEN`. Without them a daily job checks instead.
+   4. Without the client keys, the Google reviews page and nav entry are hidden.
+10. **Check the log after the first start.** In production the server lists every setting a launch still needs ([env-check.ts](src/server/env-check.ts)).
 
 ## Configuration
 
@@ -115,6 +120,9 @@ When a venue has neither a paid subscription nor trial days left, its guest page
 | `CRON_SECRET` | Enables `POST /api/cron/run` for an external scheduler (`Authorization: Bearer …`) |
 | `DISABLE_JOBS` | `1` stops the in-process hourly job ticker (birthday emails, daily clean-up), e.g. when running more than one server. On Vercel it's always off: `vercel.json` runs the jobs daily at 09:00 UTC through Vercel Cron, which needs `CRON_SECRET` set |
 | `NEXT_PUBLIC_BRAND_NAME` | Product name in the footer and titles (default "Tapmore") |
+| `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET` | Google OAuth client for Google review replies (Business Profile); the feature is hidden without them |
+| `TOKEN_ENCRYPTION_KEY` | 32 random bytes, base64: encrypts owners' Google access at rest |
+| `GOOGLE_PUBSUB_TOPIC`, `GOOGLE_PUSH_TOKEN` | Pub/Sub topic for new-review alerts, and the secret in its push URL; without them reviews are checked daily |
 | `GOOGLE_NL_API_KEY` | Optional: Google Cloud Natural Language for sentiment (a built-in lexicon is used otherwise) |
 
 ## Routes
@@ -130,6 +138,7 @@ When a venue has neither a paid subscription nor trial days left, its guest page
 | `/dashboard/<venue>` | Overview: scans, guests, feedback, setup checklist |
 | `/dashboard/<venue>/design`, `/menu`, `/loyalty` | Editors for the guest page, menus and loyalty/capture |
 | `/dashboard/<venue>/guests`, `/feedback` | Guest list (with CSV export) and feedback inbox |
+| `/dashboard/<venue>/reviews` | Google reviews: connect the Business Profile, reply settings, drafts to approve, replies posted |
 | `/dashboard/<venue>/qr`, `/qr/print` | QR downloads (PNG/SVG, per-table sources) and printable table cards |
 | `/dashboard/<venue>/billing`, `/settings` | Plan, venue details, page address, delete venue |
 | `/dashboard/account` | Name, password, delete account |
@@ -148,7 +157,7 @@ When a venue has neither a paid subscription nor trial days left, its guest page
 | `/unsubscribe?token=` | Stop offer emails from one venue (also one-click from mail apps) |
 | `/media/<venue>/<file>` | Images uploaded by owners |
 
-**APIs:** `api/auth/*`, `api/account`, `api/dashboard/venues/*` and `api/admin/*` are cookie-authenticated, and their writes are refused from other origins. `api/billing/webhook` is signed by Razorpay. The guest APIs (`api/venues`, `api/loyalty`, `api/feedback`, `api/guests`, `api/consent`, `api/events`) are unchanged.
+**APIs:** `api/auth/*`, `api/account`, `api/dashboard/venues/*` and `api/admin/*` are cookie-authenticated, and their writes are refused from other origins. `api/billing/webhook` is signed by Razorpay. `api/google/connect` and `api/google/callback` run the Google sign-in (the callback checks a one-time state token bound to the owner and venue); `api/google/notifications` takes Pub/Sub pushes and checks `GOOGLE_PUSH_TOKEN`. The guest APIs (`api/venues`, `api/loyalty`, `api/feedback`, `api/guests`, `api/consent`, `api/events`) are unchanged.
 
 ## Security notes
 
@@ -160,6 +169,7 @@ When a venue has neither a paid subscription nor trial days left, its guest page
 - Behind the Wi-Fi email gate, the password isn't sent to the page until the guest has given an email.
 - Old page addresses stay tied to their venue (and deleted venues' addresses stay reserved), so a printed QR code can never lead to someone else's page.
 - Pages can only be framed by our own (dashboard preview), with HSTS, nosniff and a strict referrer policy on every response.
+- Owners' Google refresh tokens are encrypted with AES-256-GCM (`src/server/crypto.ts`). Disconnecting revokes the token at Google and deletes every review and reply saved for the venue. Review text goes to the AI with an instruction to treat it as data, and pre-connection reviews are never answered automatically.
 - A daily clean-up deletes expired sessions and links, email copies after 90 days and page analytics after 400 days. Email copies keep no working private links once real email is on.
 
 ## Code map

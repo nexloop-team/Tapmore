@@ -37,6 +37,7 @@ const WRITE_LABELS: Record<string, string> = {
   "/staff-devices": "till devices",
   "/ai/menu-import": "AI menu import",
   "/ai/explain": "AI dish notes",
+  "/reviews": "Google reviews",
 };
 
 /** For the activity log: "saved branding, menus", "staff logins (DELETE)" and so on. */

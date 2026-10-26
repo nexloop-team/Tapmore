@@ -1,6 +1,6 @@
 "use client";
 
-import { Building2, ChevronsUpDown, CreditCard, Gift, History, LayoutDashboard, LifeBuoy, LogOut, Menu, MessageSquareText, Palette, Plus, QrCode, Settings, Shield, Store, type LucideIcon, UserRound, Users, UtensilsCrossed, X } from "lucide-react";
+import { Building2, ChevronsUpDown, CreditCard, Gift, History, LayoutDashboard, LifeBuoy, LogOut, Menu, MessageSquareText, Palette, Plus, QrCode, Settings, Shield, Star, Store, type LucideIcon, UserRound, Users, UtensilsCrossed, X } from "lucide-react";
 import Link from "next/link";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -17,6 +17,8 @@ interface ShellVenue {
   name: string;
   /** Feedback the owner hasn't opened yet: a count on the Feedback nav item. */
   unreadFeedback?: number;
+  /** Google review replies waiting for approval: a count on the Google reviews item. */
+  awaitingReviews?: number;
   /** "Active", "Trial · 3 days left" or "Unpaid", shown under the name in the switcher. */
   planLabel?: string;
   logoUrl: string | null;
@@ -45,7 +47,7 @@ interface NavGroup {
   items: NavItem[];
 }
 
-function venueNav(base: string, unreadFeedback = 0): NavGroup[] {
+function venueNav(base: string, unreadFeedback = 0, reviews: { enabled: boolean; awaiting: number } = { enabled: false, awaiting: 0 }): NavGroup[] {
   return [
     { items: [{ href: base, label: "Overview", icon: LayoutDashboard, exact: true }] },
     {
@@ -62,6 +64,7 @@ function venueNav(base: string, unreadFeedback = 0): NavGroup[] {
       items: [
         { href: `${base}/guests`, label: "Guests", icon: Users },
         { href: `${base}/feedback`, label: "Feedback", icon: MessageSquareText, badge: unreadFeedback > 0 ? String(unreadFeedback) : undefined },
+        ...(reviews.enabled ? [{ href: `${base}/reviews`, label: "Google reviews", icon: Star, badge: reviews.awaiting > 0 ? String(reviews.awaiting) : undefined }] : []),
       ],
     },
     {
@@ -191,6 +194,7 @@ export function AppShell({
   counts,
   lastVenueId,
   ownsVenues = false,
+  reviews = false,
   children,
 }: {
   mode: "venue" | "admin";
@@ -202,6 +206,8 @@ export function AppShell({
   lastVenueId?: string | null;
   /** Admin: this admin also runs a venue of their own, so "My venues" leads somewhere. */
   ownsVenues?: boolean;
+  /** Google review replies are set up on this server: show their nav item. */
+  reviews?: boolean;
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -248,7 +254,7 @@ export function AppShell({
     mode === "admin"
       ? ADMIN_NAV.map((group) => ({ ...group, items: group.items.map((item) => (counts?.[item.href] !== undefined ? { ...item, total: counts[item.href] } : item)) }))
       : venueId
-        ? venueNav(`/dashboard/${venueId}`, unreadFor(venueId))
+        ? venueNav(`/dashboard/${venueId}`, unreadFor(venueId), { enabled: reviews, awaiting: venues.find((v) => v.id === venueId)?.awaitingReviews ?? 0 })
         : [
             {
               label: "Your venues",

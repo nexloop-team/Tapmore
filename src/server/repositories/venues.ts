@@ -160,6 +160,8 @@ export interface VenueSummary {
   subscription: SubscriptionState | null;
   /** Feedback newer than this user's last look at the inbox (or the last 14 days, before their first). */
   unreadFeedback: number;
+  /** Google review replies waiting for the owner's approval. */
+  awaitingReviews: number;
 }
 
 /**
@@ -170,7 +172,8 @@ export async function listVenueSummariesForUser(userId: string): Promise<VenueSu
   const rows = (await (await getDb()).all(
     `SELECT v.id, v.short_code, v.status, (v.config::jsonb)->>'name' AS name, (v.config::jsonb)->'branding'->>'logoUrl' AS logo_url,
             s.venue_id AS sub_venue_id, s.plan AS sub_plan, s.status AS sub_status, s.trial_ends_at AS sub_trial_ends_at, s.current_period_end AS sub_current_period_end,
-            (SELECT COUNT(*) FROM feedback f WHERE f.venue_id = v.id AND f.created_at > COALESCE(m.feedback_seen_at, now() + INTERVAL '-14 days')) AS unread
+            (SELECT COUNT(*) FROM feedback f WHERE f.venue_id = v.id AND f.created_at > COALESCE(m.feedback_seen_at, now() + INTERVAL '-14 days')) AS unread,
+            (SELECT COUNT(*) FROM google_reviews r WHERE r.venue_id = v.id AND r.state IN ('awaiting', 'failed')) AS awaiting
        FROM venues v
        JOIN venue_members m ON m.venue_id = v.id AND m.user_id = ? AND m.role != 'staff'
        LEFT JOIN subscriptions s ON s.venue_id = v.id
@@ -180,6 +183,7 @@ export async function listVenueSummariesForUser(userId: string): Promise<VenueSu
     name: string | null;
     logo_url: string | null;
     unread: number;
+    awaiting: number;
   })[];
   return rows.map((row) => ({
     id: row.id,
@@ -189,6 +193,7 @@ export async function listVenueSummariesForUser(userId: string): Promise<VenueSu
     logoUrl: row.logo_url || null,
     subscription: subscriptionOf(row),
     unreadFeedback: row.unread,
+    awaitingReviews: row.awaiting,
   }));
 }
 
@@ -201,6 +206,17 @@ export async function listStaffVenuesForUser(userId: string): Promise<VenueRecor
 /** Every venue this user belongs to, with their role there (owner, staff…). */
 export async function membershipsOf(userId: string): Promise<{ venueId: string; role: string }[]> {
   return (await (await getDb()).all("SELECT venue_id AS \"venueId\", role FROM venue_members WHERE user_id = ?", userId)) as unknown as { venueId: string; role: string }[];
+}
+
+/** Confirmed emails of the venue's owners and managers (not staff), for alerts about the venue. */
+export async function venueOwnerEmails(venueId: string): Promise<string[]> {
+  const rows = (await (await getDb()).all(
+    `SELECT u.email FROM venue_members m JOIN users u ON u.id = m.user_id
+      WHERE m.venue_id = ? AND m.role != 'staff' AND u.email_verified_at IS NOT NULL AND u.blocked_at IS NULL
+      ORDER BY m.role = 'owner' DESC, u.created_at`,
+    venueId,
+  )) as { email: string }[];
+  return rows.map((row) => row.email);
 }
 
 export async function venueRole(userId: string, venueId: string): Promise<string | null> {

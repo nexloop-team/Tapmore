@@ -129,6 +129,17 @@ export default async function PrivacyPage() {
           addresses held in memory briefly to stop abuse, and a log of support actions our staff take on accounts.
         </li>
         <li>
+          <strong>Google Business Profile (only if you connect it):</strong> when you tap Connect Google, Google gives {BRAND.name} access to
+          manage your business&apos;s reviews. We keep that access (encrypted), your Business Profile&apos;s name, and the reviews and replies we
+          read through it. We use them only to show your reviews in your dashboard, draft replies, and post the replies you approve or have
+          switched on. Disconnecting takes the access back and deletes everything we read from Google.{" "}
+          {BRAND.name}&apos;s use and transfer of information received from Google APIs adheres to the{" "}
+          <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noreferrer">
+            Google API Services User Data Policy
+          </a>
+          , including the Limited Use requirements.
+        </li>
+        <li>
           <strong>Retention:</strong> while your account exists. Deleting your account erases it, along with the venues only you own and their
           guests&apos; data. Razorpay keeps its payment records, and we keep invoices, for as long as tax law requires.
         </li>
@@ -141,7 +152,8 @@ export default async function PrivacyPage() {
         <li>Email delivery (Resend)</li>
         <li>Payments (Razorpay, for venue subscriptions only)</li>
         <li>Bot protection on sign-up (Cloudflare Turnstile)</li>
-        <li>AI for owners: reading menu photos, and summarising a week&apos;s feedback notes (the note text only, never who wrote it)</li>
+        <li>AI for owners: reading menu photos, summarising a week&apos;s feedback notes (the note text only, never who wrote it), and drafting replies to Google reviews (the review&apos;s text, stars and the reviewer&apos;s first name)</li>
+        <li>Google, for venues that connect their Business Profile: reading the venue&apos;s reviews and posting its replies</li>
         {process.env.GOOGLE_NL_API_KEY && <li>Judging the tone of feedback notes (Google Cloud Natural Language; the text only, never who wrote it)</li>}
         {process.env.VERCEL && <li>Measuring how fast pages load (our cloud provider; timings and the kind of device, no cookies, nothing that identifies you)</li>}
         {process.env.SENTRY_DSN && <li>Error reports, so we can fix faults (Sentry; technical details of the fault, never guests&apos; notes or contact details)</li>}
@@ -150,7 +162,7 @@ export default async function PrivacyPage() {
 
       <h2>Security</h2>
       <p>
-        Data is encrypted in transit, passwords and private links are stored hashed, access is limited to people who need it, and admin actions
+        Data is encrypted in transit, passwords and private links are stored hashed, Google access is stored encrypted, access is limited to people who need it, and admin actions
         are logged. If a breach affects your data, we&apos;ll tell you and the Data Protection Board of India as the DPDP Act requires.
       </p>
 
