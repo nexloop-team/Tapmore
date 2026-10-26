@@ -6,8 +6,21 @@ export interface Mail {
   to: string;
   subject: string;
   text: string;
+  /** The same message laid out for mail apps (see email-template); the outbox keeps the text. */
+  html?: string;
+  /** The sender's display name, e.g. "Juniper via Tapmore" on a venue's member emails; the address stays MAIL_FROM's. */
+  fromName?: string;
   /** Extra headers, e.g. List-Unsubscribe on marketing email. */
   headers?: Record<string, string>;
+}
+
+/** MAIL_FROM with another display name: "Juniper via Tapmore <noreply@tapmore.in>". */
+export function senderWithName(from: string, name: string | undefined): string {
+  if (!name) return from;
+  const address = /<([^>]+)>/.exec(from)?.[1] ?? from.trim();
+  // Quotes, angle brackets and line breaks would break the header.
+  const safe = name.replace(/["<>\r\n\\]/g, "").trim().slice(0, 70);
+  return safe ? `"${safe}" <${address}>` : from;
 }
 
 /** How long a send may wait for the provider before it counts as failed. */
@@ -46,7 +59,7 @@ export async function sendMail(mail: Mail): Promise<boolean> {
     return false;
   }
   if (!apiKey) {
-    console.info(`[mail] from=${BRAND.emailFrom} to=${mail.to} subject="${mail.subject}"\n${mail.text}\n`);
+    console.info(`[mail] from=${senderWithName(BRAND.emailFrom, mail.fromName)} to=${mail.to} subject="${mail.subject}"\n${mail.text}\n`);
     return true;
   }
   let ok = false;
@@ -54,7 +67,14 @@ export async function sendMail(mail: Mail): Promise<boolean> {
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ from: BRAND.emailFrom, to: [mail.to], subject: mail.subject, text: mail.text, headers: mail.headers }),
+      body: JSON.stringify({
+        from: senderWithName(BRAND.emailFrom, mail.fromName),
+        to: [mail.to],
+        subject: mail.subject,
+        text: mail.text,
+        ...(mail.html ? { html: mail.html } : {}),
+        headers: mail.headers,
+      }),
       signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
     });
     ok = response.ok;

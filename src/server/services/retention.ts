@@ -10,6 +10,7 @@ import { findCardById, setCardStamps } from "../repositories/loyalty-cards";
 import { claimGuestEmail, claimReferralReward, referralRewardsInLast, releaseGuestEmail } from "../repositories/retention";
 import { recordStampEvent } from "../repositories/stamps";
 import { venueHasAccess } from "../repositories/subscriptions";
+import { renderEmail } from "./email-template";
 import { sendMail } from "./mailer";
 
 /** Referral rewards a member can earn in any 30 days, so invites can't be farmed. */
@@ -53,15 +54,18 @@ async function sendRewardReadyEmail(venue: PublicVenue, cardId: string, before: 
   const sent = await sendMail({
     to: guest.email,
     subject: `Your ${tier.rewardName} is ready at ${venue.name}`,
-    text: [
-      `Hi ${guest.first_name || "there"},`,
-      "",
-      `You've collected ${after} stamp${after === 1 ? "" : "s"} at ${venue.name}: that's a ${tier.rewardName}!`,
-      "Show your card at the counter next time you're in to claim it:",
-      `${appOrigin()}/card/${card.id}?t=${card.access_token}`,
-      "",
-      `${venue.name} · via ${BRAND.name}`,
-    ].join("\n"),
+    fromName: `${venue.name} via ${BRAND.name}`,
+    ...renderEmail({
+      brand: venue.name,
+      preheader: `You've collected ${after} stamps. Claim it next time you're in.`,
+      greeting: `Hi ${guest.first_name || "there"},`,
+      heading: `Your ${tier.rewardName} is ready!`,
+      paragraphs: [
+        `You've collected ${after} stamp${after === 1 ? "" : "s"} at ${venue.name}. Show your card at the counter next time you're in to claim your ${tier.rewardName}.`,
+      ],
+      button: { label: "Open my card", url: `${appOrigin()}/card/${card.id}?t=${card.access_token}` },
+      footer: [`${venue.name} · via ${BRAND.name}`],
+    }),
   });
   if (!sent) await releaseGuestEmail(guest.id, "reward_ready", key);
   return sent;

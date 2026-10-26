@@ -40,6 +40,7 @@ import {
   starsOf,
   type GoogleReview,
 } from "./google";
+import { renderEmail } from "./email-template";
 import { sendMail } from "./mailer";
 
 /**
@@ -154,16 +155,16 @@ async function accessLost(venueId: string, connection: GoogleConnection) {
     await sendMail({
       to,
       subject: `Reconnect Google for ${venue.config.name}`,
-      text: [
-        "Hi,",
-        "",
-        `Tapmore can no longer read or reply to ${venue.config.name}'s Google reviews. This happens when the Google account's access is removed or its password changes.`,
-        "",
-        "Connect it again here (it takes a few seconds):",
-        `${appOrigin()}/dashboard/${venueId}/reviews`,
-        "",
-        BRAND.name,
-      ].join("\n"),
+      ...renderEmail({
+        brand: BRAND.name,
+        preheader: `New Google reviews for ${venue.config.name} aren't being answered until you reconnect.`,
+        heading: "Reconnect Google",
+        paragraphs: [
+          `${BRAND.name} can no longer read or reply to ${venue.config.name}'s Google reviews. This happens when the Google account's access is removed or its password changes.`,
+          "Connecting again takes a few seconds.",
+        ],
+        button: { label: "Reconnect Google", url: `${appOrigin()}/dashboard/${venueId}/reviews` },
+      }),
     });
   }
 }

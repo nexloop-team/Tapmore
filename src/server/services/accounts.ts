@@ -26,6 +26,7 @@ import { deleteVenue, membershipsOf, venuesOwnedSolelyBy } from "../repositories
 import { afterResponse } from "../after";
 import { stopBilling } from "./billing";
 import { disconnect as disconnectGoogle } from "./reviews";
+import { renderEmail } from "./email-template";
 import { sendMail } from "./mailer";
 
 export async function sendVerificationEmail(user: User, origin: string) {
@@ -33,7 +34,15 @@ export async function sendVerificationEmail(user: User, origin: string) {
   await sendMail({
     to: user.email,
     subject: `Confirm your email for ${BRAND.name}`,
-    text: `Hi ${user.name},\n\nConfirm your email address to finish setting up your account:\n${origin}/api/auth/verify?token=${encodeURIComponent(token)}\n\nThe link works for 7 days. If you didn't sign up, ignore this email.\n\n${BRAND.name}`,
+    ...renderEmail({
+      brand: BRAND.name,
+      preheader: "One tap to finish setting up your account.",
+      greeting: `Hi ${user.name},`,
+      heading: "Confirm your email",
+      paragraphs: ["Tap the button to confirm your email address and finish setting up your account."],
+      button: { label: "Confirm my email", url: `${origin}/api/auth/verify?token=${encodeURIComponent(token)}` },
+      notes: [`The link works for 7 days. If you didn't sign up for ${BRAND.name}, you can ignore this email.`],
+    }),
   });
 }
 
@@ -94,7 +103,15 @@ export async function sendPasswordResetEmail(user: User, origin: string) {
   await sendMail({
     to: user.email,
     subject: `Reset your ${BRAND.name} password`,
-    text: `Hi ${user.name},\n\nSomeone (hopefully you) asked to reset your password. Choose a new one here:\n${origin}/reset-password?token=${encodeURIComponent(token)}\n\nThe link works for one hour. If you didn't ask, ignore this email and your password stays the same.\n\n${BRAND.name}`,
+    ...renderEmail({
+      brand: BRAND.name,
+      preheader: "Choose a new password. The link works for one hour.",
+      greeting: `Hi ${user.name},`,
+      heading: "Reset your password",
+      paragraphs: [`Someone (hopefully you) asked to reset the password for your ${BRAND.name} account.`],
+      button: { label: "Choose a new password", url: `${origin}/reset-password?token=${encodeURIComponent(token)}` },
+      notes: ["The link works for one hour. If you didn't ask, ignore this email: your password stays the same."],
+    }),
   });
 }
 

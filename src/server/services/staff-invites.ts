@@ -6,6 +6,7 @@ import type { User } from "../repositories/users";
 import { getDb, transaction } from "../db";
 import { ServiceError } from "../http";
 import { addStaffMember, getVenueRecord, isManagerRole, venueRole, type VenueRecord } from "../repositories/venues";
+import { renderEmail } from "./email-template";
 import { sendMail } from "./mailer";
 import { completePairing, createPairing, currentStaffDevice } from "./staff";
 
@@ -36,14 +37,19 @@ export async function createStaffInvite(venue: VenueRecord, inviter: User, rawEm
   await sendMail({
     to: email,
     subject: `You're invited to the till at ${venue.config.name.slice(0, 60)}`,
-    text: [
-      `You've been invited to use the till at ${venue.config.name} on ${BRAND.name}.`,
-      "",
-      "Open this link on the phone or tablet you'll use behind the counter, then sign in or create a free account:",
-      url,
-      "",
-      `The link works for ${INVITE_DAYS} days. Staff accounts can stamp cards and give out rewards, nothing else.`,
-    ].join("\n"),
+    fromName: `${venue.config.name} via ${BRAND.name}`,
+    ...renderEmail({
+      brand: venue.config.name,
+      preheader: `Use the till at ${venue.config.name} to stamp cards and give out rewards.`,
+      heading: "You're invited to the till",
+      paragraphs: [
+        `${venue.config.name} has invited you to use its till on ${BRAND.name}.`,
+        "Open the link on the phone or tablet you'll use behind the counter, then sign in or create a free account.",
+      ],
+      button: { label: "Join the till", url },
+      notes: [`The link works for ${INVITE_DAYS} days. Staff accounts can stamp cards and give out rewards, nothing else.`],
+      footer: [`${venue.config.name} · via ${BRAND.name}`],
+    }),
   });
   return { url };
 }

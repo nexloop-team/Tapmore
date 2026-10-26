@@ -1,4 +1,5 @@
 import "server-only";
+import { BRAND } from "@/config/brand";
 import type { Db } from "../db";
 import type { z } from "zod";
 import type { EnrollResponse, StampResponse, enrollRequest, stampRequest } from "@/lib/api/contracts";
@@ -15,6 +16,7 @@ import { attachReferral, findReferrerCard } from "../repositories/retention";
 import { recordStampEvent } from "../repositories/stamps";
 import { friendJoinBonus } from "./retention";
 import { findVenue, getVenueSettings } from "../repositories/venues";
+import { renderEmail } from "./email-template";
 import { sendMail } from "./mailer";
 import { afterResponse } from "../after";
 
@@ -46,14 +48,20 @@ async function sendCardEmail(venue: PublicVenue, email: string, card: LoyaltyCar
   return await sendMail({
     to: email,
     subject: `Your ${venue.name} rewards card`,
+    fromName: `${venue.name} via ${BRAND.name}`,
     // Also the notice for guests signed up at the till, who never saw the join form.
-    text: [
-      `Here's your ${venue.name} card. Keep this link handy and show it when you visit:`,
-      cardUrl(origin, card),
-      "",
-      `You joined ${venue.name}'s membership, so your card, rewards and a birthday wish come by email. You can delete your card and details any time from the bottom of your card.`,
-      `Privacy notice: ${origin}/privacy`,
-    ].join("\n"),
+    ...renderEmail({
+      brand: venue.name,
+      preheader: "Your card is ready. Show it when you visit to collect stamps.",
+      heading: `Your ${venue.name} card`,
+      paragraphs: ["Your card is ready. Open it when you visit and show it at the counter to collect your stamps and rewards. Keep this email so you can find it again."],
+      button: { label: "Open my card", url: cardUrl(origin, card) },
+      notes: [
+        `You joined ${venue.name}'s membership, so your card, rewards and a birthday wish come by email. You can delete your card and details any time from the bottom of your card.`,
+      ],
+      footer: [`${venue.name} · via ${BRAND.name}`],
+      footerLinks: [{ label: "Privacy notice", url: `${origin}/privacy` }],
+    }),
   });
 }
 

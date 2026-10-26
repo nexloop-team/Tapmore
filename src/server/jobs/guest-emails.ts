@@ -8,6 +8,7 @@ import { appOrigin } from "../origin";
 import { birthdayGuests, claimGuestEmail, ensureUnsubscribeToken, releaseGuestEmail, type EmailableGuest } from "../repositories/retention";
 import { venueHasAccess } from "../repositories/subscriptions";
 import { getVenueSettings } from "../repositories/venues";
+import { renderEmail, type EmailContent } from "../services/email-template";
 import { sendMail } from "../services/mailer";
 import { localParts } from "./time";
 
@@ -26,21 +27,27 @@ function isLeapYear(year: number): boolean {
   return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
 }
 
-async function memberFooter(venueName: string, customerId: string): Promise<{ text: string; headers: Record<string, string> }> {
-  const token = await ensureUnsubscribeToken(customerId);
-  return {
-    text: `\n—\nYou're getting this as a member of ${venueName}'s card. Unsubscribe: ${appOrigin()}/unsubscribe?token=${token}\n${venueName} · via ${BRAND.name}`,
+type MemberEmail = Omit<EmailContent, "brand" | "footer" | "footerLinks">;
+
+/** Sent once per key, from "{venue} via Tapmore", with the member footer and one-click unsubscribe. */
+async function send(guest: EmailableGuest, kind: string, key: string, subject: string, content: MemberEmail, venueName: string): Promise<boolean> {
+  if (!await claimGuestEmail(guest.id, kind, key)) return false;
+  const token = await ensureUnsubscribeToken(guest.id);
+  const ok = await sendMail({
+    to: guest.email,
+    subject,
+    fromName: `${venueName} via ${BRAND.name}`,
+    ...renderEmail({
+      ...content,
+      brand: venueName,
+      footer: [`You're getting this as a member of ${venueName}'s card.`, `${venueName} · via ${BRAND.name}`],
+      footerLinks: [{ label: "Unsubscribe", url: `${appOrigin()}/unsubscribe?token=${token}` }],
+    }),
     headers: {
       "List-Unsubscribe": `<${appOrigin()}/api/unsubscribe?token=${token}>`,
       "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
     },
-  };
-}
-
-async function send(guest: EmailableGuest, kind: string, key: string, subject: string, body: string[], venueName: string): Promise<boolean> {
-  if (!await claimGuestEmail(guest.id, kind, key)) return false;
-  const footer = await memberFooter(venueName, guest.id);
-  const ok = await sendMail({ to: guest.email, subject, text: `${body.join("\n")}\n${footer.text}`, headers: footer.headers });
+  });
   if (!ok) await releaseGuestEmail(guest.id, kind, key);
   return ok;
 }
@@ -74,15 +81,16 @@ export async function runGuestAutomations(now: Date): Promise<number> {
         "birthday",
         String(local.year),
         `Happy birthday from ${venue.name}!`,
-        [
-          `Hi ${guest.firstName || "there"},`,
-          "",
-          `Happy birthday from everyone at ${venue.name}! We hope you have a lovely day.`,
-          "",
-          `Come in to ${venue.name} today for your birthday reward. Just show your card at the counter.`,
-          "",
-          "See you soon!",
-        ],
+        {
+          preheader: "A birthday reward is waiting for you today.",
+          greeting: `Hi ${guest.firstName || "there"},`,
+          heading: "Happy birthday! 🎂",
+          paragraphs: [
+            `Happy birthday from everyone at ${venue.name}! We hope you have a lovely day.`,
+            `Come in to ${venue.name} today for your birthday reward. Just show your card at the counter.`,
+            "See you soon!",
+          ],
+        },
         venue.name,
       );
       if (ok) sent += 1;
