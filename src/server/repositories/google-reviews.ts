@@ -61,7 +61,14 @@ export async function saveConnection(venueId: string, refreshTokenEnc: string, c
   );
 }
 
+/** Links the venue to one Business Profile. Reviews read from a different profile before are dropped. */
 export async function linkLocation(venueId: string, accountName: string, locationName: string, locationTitle: string) {
+  await (await getDb()).run(
+    `DELETE FROM google_reviews WHERE venue_id = ? AND id NOT LIKE ? || '/' || ? || '/reviews/%'`,
+    venueId,
+    accountName,
+    locationName,
+  );
   await (await getDb()).run(
     "UPDATE google_connections SET account_name = ?, location_name = ?, location_title = ?, status = 'active', last_error = NULL WHERE venue_id = ?",
     accountName,

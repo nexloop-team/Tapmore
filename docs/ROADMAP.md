@@ -21,11 +21,12 @@ _Last updated: 2026-10-09_
 - Admin panel (`/admin`) for suspending venues, giving free access and revenue.
 - India: PostgreSQL (Supabase), prices in ₹, venue time zones (IST by default), English-only guest pages, and the legal pages Razorpay and Indian law ask for (terms, DPDP privacy policy, refunds, delivery, contact).
 
-- Staff stamping at the till, refer-a-friend, automatic guest emails, weekly owner digest.
+- Staff stamping at the till, refer-a-friend, automatic guest emails (card, reward ready, birthday wish).
+- Google review replies: owners connect their Business Profile; new reviews arrive within minutes and get an AI reply (4–5★ posted automatically, 1–3★ wait for approval; both switchable).
 - AI menu import and "What's this dish?" explanations; announcement banner; specials and badges on the menu.
 
 **Not done yet**
-- Not deployed.
+- Live at https://www.tapmore.in for the pilot; Razorpay, Turnstile and the Google app's "In production" switch still to do.
 - Business details for the legal pages, and a lawyer's review of them.
 - No paying customers.
 
@@ -70,7 +71,7 @@ These are must-haves. Without them the product is not ready to demo or sell.
 - [ ] **Monitoring** (the code is in; these are the accounts): create a Sentry project and set `SENTRY_DSN`; turn on Speed Insights in the Vercel project; add an uptime check (e.g. UptimeRobot).
 - [ ] **Legal (India):**
   - [x] Terms, privacy policy (DPDP Act 2023), cancellation & refunds, delivery policy and contact page.
-  - [ ] Name a Grievance Officer on the contact and privacy pages (left out for now; Indian e-commerce and data rules expect one).
+  - [x] Name a Grievance Officer on the contact and privacy pages (`GRIEVANCE_OFFICER_NAME`).
   - [x] Guests can delete their own card; owners can delete a guest on request.
   - [x] Business details set: Tapmore, a partnership firm, Nashik office (`.env.local`).
   - [ ] Sign the partnership deed, get the firm's PAN, a current account and a Udyam certificate; consider registering the firm with the Registrar of Firms (an unregistered firm can't sue a customer for unpaid dues, Indian Partnership Act s.69).
@@ -185,7 +186,6 @@ Do these when there's a reason, not before.
 Ideas not yet decided. Move them into a section above when you commit to them.
 
 - Tap-to-stamp NFC stickers at the till
-- Track real Google reviews: a daily rating and review-count snapshot (Places API), or full reviews with replies (Business Profile API). Skipped for now (2026-10-10); the overview counts taps on the review button.
 - "Order at table" / pay at table
 - Table-specific QR codes that call staff ("Request the bill")
 - Integration with POS systems (Square, Toast, Petpooja) to stamp automatically on payment
@@ -202,6 +202,13 @@ Newest first. One line per change: what changed and why.
 ### YYYY-MM-DD
 - Added / Changed / Fixed: what, and why
 ```
+
+### 2026-10-26: Google review replies
+- Added: Google review replies. An owner taps Connect Google once (Tapmore's own OAuth client, `business.manage`; owners never touch Google Cloud). New reviews arrive through Google's Pub/Sub alerts within minutes, with a daily backup check. 4–5★ reviews get an AI reply posted automatically and 1–3★ ones wait as a draft; each is a switch per venue. Reviews from before connecting are never answered automatically, and nothing is drafted or posted while a venue is unpaid. Google's project approval came on 2026-10-22; branding verified 2026-10-26.
+- Added: refresh tokens are sealed with AES-256-GCM (`TOKEN_ENCRYPTION_KEY`). Disconnecting, or deleting the venue or account, takes the access back at Google and deletes every review read through it; switching to another Business Profile drops the old one's reviews.
+- Added: the privacy notice's Google section with the Limited Use statement Google requires, a terms line, and the homepage feature and FAQ.
+- Added: a Grievance Officer on the Contact and privacy pages (`GRIEVANCE_OFFICER_NAME`).
+- Changed: emails go from `noreply@tapmore.in` through Resend (domain verified); the README lists every email Tapmore sends.
 
 ### 2026-10-18: offline till, cached guest pages
 - Added (till): a stamp, reward or undo made with no connection is kept on the till ("Offline · 1 waiting") and sent when it's back, within 2 minutes; older ones are dropped with "Not sent: … Scan their card again" (kept until dismissed). Every till action carries a request id the server remembers (`stamp_events.request_id`), so a resend never stamps twice. The Online/Offline badge also notices Wi-Fi with no internet behind it (`experimental.useOffline`).

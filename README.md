@@ -1,6 +1,6 @@
 # Tapmore — self-serve QR pages for hospitality venues
 
-Venue owners sign up, answer four onboarding questions and get a live guest page with printable QR codes, all without help from us. A guest who scans a table QR code gets the menu, Wi-Fi, a loyalty card that staff stamp at the till, a private feedback box with a Google review invitation for every guest, and a Sudoku to pass the time. Owners manage everything from a dashboard and pay one yearly subscription per venue. Guest-page behaviour is modelled on the analysis in [docs/candour-analysis.md](docs/candour-analysis.md), with our own brand, copy and backend.
+Venue owners sign up, answer four onboarding questions and get a live guest page with printable QR codes, all without help from us. A guest who scans a table QR code gets the menu, Wi-Fi, a loyalty card that staff stamp at the till, a private feedback box with a Google review invitation for every guest, and a Sudoku to pass the time. Owners manage everything from a dashboard, can connect their Google Business Profile so every Google review gets a reply (AI-drafted, posted automatically or after approval), and pay one yearly subscription per venue. Guest-page behaviour is modelled on the analysis in [docs/candour-analysis.md](docs/candour-analysis.md), with our own brand, copy and backend.
 
 Plans, to-dos, decisions and the change log live in [docs/ROADMAP.md](docs/ROADMAP.md).
 
@@ -44,6 +44,22 @@ One plan, billed per venue: **₹999 a year**, with a **7-day free trial** and n
 
 When a venue has neither a paid subscription nor trial days left, its guest page (and everything guests reach through it: menu, loyalty card, till stamping) goes offline. The owner can still sign in, edit and subscribe, and the page comes back exactly as it was. A failed renewal keeps the page up while Razorpay retries; it goes offline when Razorpay halts the subscription. Prices and the access rules live in `src/lib/plans.ts`.
 
+## Emails
+
+Every email is plain text from `MAIL_FROM` and is copied to the `outbox` table (kept 90 days; with Resend on, private links in the copy are blanked out). There are no marketing emails.
+
+| Email | Sent when |
+|---|---|
+| Confirm your email | Sign-up, or a new link requested |
+| Reset your password | "Forgot password" |
+| You're invited to the till | An owner invites a staff member |
+| Reconnect Google | A venue's Google access stops working (once) |
+| Your {venue} rewards card | A guest joins the card (on the page or at the till), or a returning member asks for their card again |
+| Your {reward} is ready | A stamp completes a reward (once per reward per day) |
+| Happy birthday from {venue} | On a member's birthday, in the venue's daytime, while its birthday reward is on (with an unsubscribe link) |
+
+Payment receipts and renewal notices come from Razorpay. Resend's free plan sends 100 emails a day, roughly 20 busy venues; upgrade before that.
+
 ## Going to production
 
 1. **Database and files:**
@@ -59,7 +75,7 @@ When a venue has neither a paid subscription nor trial days left, its guest page
    4. Check both before starting: `node --env-file=.env.local scripts/check-connections.mjs`.
    5. Rate limits are counted in the database (the `rate_limits` table), so they hold across any number of instances, Vercel included. They read the visitor's address from the proxy's end of `X-Forwarded-For`: set `TRUSTED_PROXY_COUNT=2` with Cloudflare in front of the host, or `CLIENT_IP_HEADER` to a header your CDN sets.
    6. Every table has row-level security on with no policies. Supabase's automatic REST API can't read them; the app connects as the tables' owner and isn't affected.
-2. **Set `APP_URL`** to your public origin (e.g. `https://tapmore.app`). It's encoded into every QR code, so it must never change.
+2. **Set `APP_URL`** to your public origin (e.g. `https://www.tapmore.in`). It's encoded into every QR code, so it must never change.
 3. **Email:** create a [Resend](https://resend.com) account, verify your sending domain, then set `RESEND_API_KEY` and `MAIL_FROM`.
 4. **Razorpay:**
    1. In the Razorpay dashboard, create a yearly plan (Subscriptions → Plans) for ₹999 (₹1,178.82 once GST is charged), and set `RAZORPAY_PLAN_ID`.
@@ -106,7 +122,7 @@ When a venue has neither a paid subscription nor trial days left, its guest page
 | `DATA_DIR` | Local folder for the embedded database and, without `S3_*`, images and feedback photos (default `./data`) |
 | `ADMIN_EMAILS` | Comma-separated super admins (the email must be verified). They can make other accounts admins from `/admin/accounts` |
 | `RESEND_API_KEY` | Sends email through Resend; without it emails only go to the `outbox` table and log |
-| `MAIL_FROM` | Sender for all emails, e.g. `Tapmore <hello@tapmore.app>` |
+| `MAIL_FROM` | Sender for all emails, e.g. `Tapmore <noreply@tapmore.in>` (an address on the domain verified in Resend) |
 | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_PLAN_ID` | Razorpay Subscriptions for the yearly plan |
 | `RAZORPAY_WEBHOOK_SECRET` | Verifies `/api/billing/webhook` |
 | `BILLING_DEV_MODE` | `1` allows dev-mode billing in a production build (for staging only) |
@@ -154,10 +170,10 @@ When a venue has neither a paid subscription nor trial days left, its guest page
 | `/card/<id>?t=<token>` | Member's web card (linked from the enrolment email), where they can also delete their card and details |
 | `/consent?token=` | Old offers-confirmation links (offers consent is no longer asked; joining is agreeing to the membership) |
 | `/privacy`, `/terms`, `/refunds`, `/shipping`, `/contact` | Privacy policy (DPDP), terms, cancellation and refunds, delivery policy, contact |
-| `/unsubscribe?token=` | Stop offer emails from one venue (also one-click from mail apps) |
+| `/unsubscribe?token=` | Stop birthday emails from one venue (also one-click from mail apps) |
 | `/media/<venue>/<file>` | Images uploaded by owners |
 
-**APIs:** `api/auth/*`, `api/account`, `api/dashboard/venues/*` and `api/admin/*` are cookie-authenticated, and their writes are refused from other origins. `api/billing/webhook` is signed by Razorpay. `api/google/connect` and `api/google/callback` run the Google sign-in (the callback checks a one-time state token bound to the owner and venue); `api/google/notifications` takes Pub/Sub pushes and checks `GOOGLE_PUSH_TOKEN`. The guest APIs (`api/venues`, `api/loyalty`, `api/feedback`, `api/guests`, `api/consent`, `api/events`) are unchanged.
+**APIs:** `api/auth/*`, `api/account`, `api/dashboard/venues/*` and `api/admin/*` are cookie-authenticated, and their writes are refused from other origins. `api/billing/webhook` is signed by Razorpay. `api/google/connect` and `api/google/callback` run the Google sign-in (the callback checks a one-time state token bound to the owner and venue); `api/google/notifications` takes Pub/Sub pushes and checks `GOOGLE_PUSH_TOKEN`. The guest APIs (`api/venues`, `api/loyalty`, `api/feedback`, `api/guests`, `api/consent`, `api/events`) need no sign-in and are rate limited.
 
 ## Security notes
 

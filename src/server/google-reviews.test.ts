@@ -333,3 +333,19 @@ describe("disconnecting", () => {
     expect((await m.repo.listStoredReviews(venue.id, "all", 20, 0)).total).toBe(0);
   });
 });
+
+describe("deleting and switching", () => {
+  it("deleting the venue revokes the Google access too", async () => {
+    const { venue, code } = await connectedVenue((loc) => addReview(loc, "FIVE", "Lovely"));
+    await m.admin.removeVenue(venue, venue.config.name);
+    expect(fake.revoked).toEqual([`rt-${code}`]);
+    expect(await m.repo.getConnection(venue.id)).toBeNull();
+  });
+
+  it("linking another Business Profile drops the old one's reviews", async () => {
+    const { venue } = await connectedVenue((loc) => addReview(loc, "FIVE", "Old profile"));
+    expect((await m.repo.listStoredReviews(venue.id, "all", 20, 0)).total).toBe(1);
+    await m.repo.linkLocation(venue.id, "accounts/1", "locations/somewhere-else", "Another branch");
+    expect((await m.repo.listStoredReviews(venue.id, "all", 20, 0)).total).toBe(0);
+  });
+});

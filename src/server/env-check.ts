@@ -50,7 +50,7 @@ function productionConfigProblems(env: NodeJS.ProcessEnv = process.env): ConfigP
 
   if (!has("ADMIN_EMAILS")) warn("ADMIN_EMAILS is not set, so nobody can open /admin.");
   if (!has("TURNSTILE_SECRET_KEY") || !has("NEXT_PUBLIC_TURNSTILE_SITE_KEY")) error("Turnstile isn't set up, so sign-up and password reset have no bot check: scripts can create accounts and send reset emails.");
-  if (env.DISABLE_JOBS === "1" && !has("CRON_SECRET")) error("DISABLE_JOBS=1 without CRON_SECRET: weekly summaries, guest emails and clean-up never run.");
+  if (env.DISABLE_JOBS === "1" && !has("CRON_SECRET")) error("DISABLE_JOBS=1 without CRON_SECRET: birthday emails, the daily Google review check and clean-up never run.");
 
   const legal = missingLegalDetails();
   if (legal.length) error(`Business details for the legal and contact pages are missing: ${legal.join(", ")}. Razorpay and Indian consumer law require them.`);

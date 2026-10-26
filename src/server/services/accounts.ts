@@ -25,6 +25,7 @@ import {
 import { deleteVenue, membershipsOf, venuesOwnedSolelyBy } from "../repositories/venues";
 import { afterResponse } from "../after";
 import { stopBilling } from "./billing";
+import { disconnect as disconnectGoogle } from "./reviews";
 import { sendMail } from "./mailer";
 
 export async function sendVerificationEmail(user: User, origin: string) {
@@ -136,6 +137,7 @@ export async function removeAccount(userId: string): Promise<number> {
   const venues = await venuesOwnedSolelyBy(userId);
   for (const venueId of venues) {
     await stopBilling(venueId);
+    await disconnectGoogle(venueId);
     await deleteVenue(venueId);
   }
   (await (await getDb()).run("DELETE FROM users WHERE id = ?", userId));

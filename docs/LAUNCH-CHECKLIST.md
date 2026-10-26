@@ -31,13 +31,14 @@ Project → Settings → Environment Variables:
 | `APP_URL` | Your final address, e.g. `https://tapmore.in` |
 | `DATABASE_URL` | Supabase Transaction pooler string (port 6543) |
 | `S3_BUCKET`, `S3_ENDPOINT`, `S3_REGION`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | From Supabase Storage |
-| `RESEND_API_KEY`, `MAIL_FROM` | From Resend; `MAIL_FROM` like `Tapmore <hello@tapmore.in>` |
+| `RESEND_API_KEY`, `MAIL_FROM` | From Resend; `MAIL_FROM` like `Tapmore <noreply@tapmore.in>`. Keep both out of `.env.local`, so local emails stay in the terminal with their links |
 | `NEXT_PUBLIC_SUPPORT_EMAIL` | Where cafés write to you (your Gmail is fine for now) |
 | `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | From Cloudflare |
 | `CRON_SECRET` | Any long random string (daily jobs need it) |
 | `ADMIN_EMAILS` | Your email |
 | `LEGAL_ENTITY_NAME`, `LEGAL_ADDRESS`, `LEGAL_JURISDICTION_CITY`, `SUPPORT_PHONE`, `GRIEVANCE_OFFICER_NAME` | Your name or firm, address, city, phone, and your own name as Grievance Officer |
 | `SENTRY_DSN`, `GROQ_API_KEY` | If you made those accounts |
+| `GOOGLE_OAUTH_CLIENT_ID`, `GOOGLE_OAUTH_CLIENT_SECRET`, `TOKEN_ENCRYPTION_KEY`, `GOOGLE_PUBSUB_TOPIC`, `GOOGLE_PUSH_TOKEN` | Google review replies (see the README's Going to production, step 9). Never change `TOKEN_ENCRYPTION_KEY` once cafés have connected |
 
 - [ ] All set, then **Deploy**.
 - [ ] Domain: Vercel → Settings → Domains → add yours and follow the DNS steps.
@@ -51,6 +52,7 @@ Project → Settings → Environment Variables:
 - [ ] Join the loyalty card (email arrives), leave feedback.
 - [ ] Pair a second phone as the till and stamp your card.
 - [ ] `/admin` opens and shows your café.
+- [ ] **Google reviews:** connect a Business Profile you manage, with **auto-reply off first** (replies are public). Post one reply and check it on Google Maps. Leave a test review from another account: it should appear within minutes (Pub/Sub alert), not just after "Check now".
 
 ## 5. Running the pilot
 
@@ -74,6 +76,8 @@ Only once the pilot says yes:
 - [ ] Test a payment, renewal and cancellation in Razorpay test mode, then one real payment and a refund.
 - [ ] Supabase Pro (daily backups) and Vercel Pro.
 - [ ] A support email on your domain.
+- [ ] Google Auth Platform → Audience → **Publish app** (branding is verified), so any café can connect Google and access stops expiring after 7 days.
+- [ ] Cloudflare Turnstile keys (skipped for the pilot).
 - [ ] A lawyer reviews `/terms`, `/privacy` and `/refunds`.
 - [ ] Run a security review of the code.
 - [ ] Move pilot cafés from free access to paid (or keep them free as a thank-you).

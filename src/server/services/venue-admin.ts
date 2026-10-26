@@ -8,6 +8,7 @@ import { ServiceError } from "../http";
 import { newId } from "../ids";
 import type { User } from "../repositories/users";
 import { stopBilling } from "./billing";
+import { disconnect as disconnectGoogle } from "./reviews";
 import { createVenue, deleteVenue, getVenueRecord, isManagerRole, listVenuesForUser, shortCodeTaken, type VenueRecord, updateShortCode, updateVenueConfig, venueRole } from "../repositories/venues";
 
 const MAX_VENUES_PER_ACCOUNT = 20;
@@ -69,5 +70,7 @@ function stripUndefined<T extends object>(value: T): Partial<T> {
 export async function removeVenue(venue: VenueRecord, confirmName: string) {
   if (confirmName.trim() !== venue.config.name.trim()) throw new ServiceError(400, "Type the venue name exactly to confirm");
   await stopBilling(venue.id);
+  // Take Tapmore's Google access back too; deleting the venue only removes our copy.
+  await disconnectGoogle(venue.id);
   await deleteVenue(venue.id);
 }
