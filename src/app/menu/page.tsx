@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { LandingError } from "@/components/landing/LandingError";
 import { PausedPage } from "@/components/landing/PausedPage";
-import { menuExternalUrl, sanitiseExternalUrl } from "@/lib/venue/features";
+import { menuExternalUrl, safeImageUrl, sanitiseExternalUrl } from "@/lib/venue/features";
 import { MenuView } from "@/components/menu/MenuView";
 import { EmbedStyle } from "@/components/EmbedStyle";
 import { DemoBar } from "@/components/landing/DemoBar";
@@ -16,7 +16,12 @@ import "@/styles/pages.css";
 
 export async function generateMetadata({ searchParams }: PageProps<"/menu">): Promise<Metadata> {
   const venue = await loadVenue(venueParam(await searchParams));
-  return { title: venue ? `${venue.name} menu` : BRAND.name, robots: { index: false, follow: false } };
+  const logo = venue ? safeImageUrl(venue.branding.logoUrl) : null;
+  return {
+    title: { absolute: venue ? `${venue.name} menu` : BRAND.name },
+    ...(logo ? { icons: { icon: logo, apple: logo } } : {}),
+    robots: { index: false, follow: false },
+  };
 }
 
 /** `/menu?i=<venue code>` — the hosted menu behind the landing page's menu card. */

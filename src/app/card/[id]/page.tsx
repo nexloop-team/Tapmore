@@ -26,7 +26,7 @@ import type { PublicVenue } from "@/lib/venue/types";
 type ViewerCard = NonNullable<Awaited<ReturnType<typeof findCardForViewer>>>;
 
 export const metadata: Metadata = {
-  title: "Your card",
+  title: { absolute: "Your card" },
   robots: { index: false, follow: false },
   // The URL carries the card's access token; never send it onwards.
   referrer: "no-referrer",

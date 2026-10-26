@@ -11,7 +11,7 @@ import "@/styles/pages.css";
 // Blocks on purpose (Cache Components): opened from an email link; the token decides what the page says.
 export const instant = false;
 
-export const metadata: Metadata = { title: "Email preferences", robots: { index: false, follow: false }, referrer: "no-referrer" };
+export const metadata: Metadata = { title: { absolute: "Email preferences" }, robots: { index: false, follow: false }, referrer: "no-referrer" };
 
 /**
  * The double-opt-in link (`?token=`) lands here and asks for a tap, because

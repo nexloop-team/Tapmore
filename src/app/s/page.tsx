@@ -1,5 +1,5 @@
 import { LOCALE } from "@/lib/i18n";
-import { guestSafeVenue } from "@/lib/venue/features";
+import { guestSafeVenue, safeImageUrl } from "@/lib/venue/features";
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 import { FEEDBACK_VARIANT_COOKIE, LandingApp, type FeedbackVariant } from "@/components/landing/LandingApp";
@@ -17,8 +17,11 @@ import "@/styles/pages.css";
 
 export async function generateMetadata({ searchParams }: PageProps<"/s">): Promise<Metadata> {
   const venue = await loadVenue(venueParam(await searchParams));
+  const logo = venue ? safeImageUrl(venue.branding.logoUrl) : null;
   return {
-    title: venue ? venue.name : BRAND.name,
+    // The venue's own name and logo in the tab, without "· Tapmore": guests are at the venue, not on Tapmore.
+    title: { absolute: venue ? venue.name : BRAND.name },
+    ...(logo ? { icons: { icon: logo, apple: logo } } : {}),
     // Venue pages are reached by QR code; they have nothing to offer a search index.
     robots: { index: false, follow: false },
   };

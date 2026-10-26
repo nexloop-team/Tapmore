@@ -9,7 +9,7 @@ import "@/styles/pages.css";
 // Blocks on purpose (Cache Components): opened from an email link; the token decides what the page says.
 export const instant = false;
 
-export const metadata: Metadata = { title: "Unsubscribe", robots: { index: false, follow: false }, referrer: "no-referrer" };
+export const metadata: Metadata = { title: { absolute: "Unsubscribe" }, robots: { index: false, follow: false }, referrer: "no-referrer" };
 
 /**
  * Linked from every birthday email. Asks for a click rather than unsubscribing
