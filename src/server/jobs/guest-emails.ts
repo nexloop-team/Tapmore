@@ -29,14 +29,14 @@ function isLeapYear(year: number): boolean {
 
 type MemberEmail = Omit<EmailContent, "brand" | "footer" | "footerLinks">;
 
-/** Sent once per key, from "{venue} via Tapmore", with the member footer and one-click unsubscribe. */
+/** Sent once per key, from the venue's name, with the member footer and one-click unsubscribe. */
 async function send(guest: EmailableGuest, kind: string, key: string, subject: string, content: MemberEmail, venueName: string): Promise<boolean> {
   if (!await claimGuestEmail(guest.id, kind, key)) return false;
   const token = await ensureUnsubscribeToken(guest.id);
   const ok = await sendMail({
     to: guest.email,
     subject,
-    fromName: `${venueName} via ${BRAND.name}`,
+    fromName: venueName,
     ...renderEmail({
       ...content,
       brand: venueName,

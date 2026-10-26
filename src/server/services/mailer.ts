@@ -8,13 +8,13 @@ export interface Mail {
   text: string;
   /** The same message laid out for mail apps (see email-template); the outbox keeps the text. */
   html?: string;
-  /** The sender's display name, e.g. "Juniper via Tapmore" on a venue's member emails; the address stays MAIL_FROM's. */
+  /** The sender's display name, e.g. "Juniper" on a venue's member emails; the address stays MAIL_FROM's. */
   fromName?: string;
   /** Extra headers, e.g. List-Unsubscribe on marketing email. */
   headers?: Record<string, string>;
 }
 
-/** MAIL_FROM with another display name: "Juniper via Tapmore <noreply@tapmore.in>". */
+/** MAIL_FROM with another display name: "Juniper <noreply@tapmore.in>". */
 export function senderWithName(from: string, name: string | undefined): string {
   if (!name) return from;
   const address = /<([^>]+)>/.exec(from)?.[1] ?? from.trim();

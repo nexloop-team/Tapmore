@@ -48,7 +48,7 @@ async function sendCardEmail(venue: PublicVenue, email: string, card: LoyaltyCar
   return await sendMail({
     to: email,
     subject: `Your ${venue.name} rewards card`,
-    fromName: `${venue.name} via ${BRAND.name}`,
+    fromName: venue.name,
     // Also the notice for guests signed up at the till, who never saw the join form.
     ...renderEmail({
       brand: venue.name,

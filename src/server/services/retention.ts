@@ -54,7 +54,7 @@ async function sendRewardReadyEmail(venue: PublicVenue, cardId: string, before: 
   const sent = await sendMail({
     to: guest.email,
     subject: `Your ${tier.rewardName} is ready at ${venue.name}`,
-    fromName: `${venue.name} via ${BRAND.name}`,
+    fromName: venue.name,
     ...renderEmail({
       brand: venue.name,
       preheader: `You've collected ${after} stamps. Claim it next time you're in.`,

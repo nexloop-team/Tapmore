@@ -37,7 +37,7 @@ export async function createStaffInvite(venue: VenueRecord, inviter: User, rawEm
   await sendMail({
     to: email,
     subject: `You're invited to the till at ${venue.config.name.slice(0, 60)}`,
-    fromName: `${venue.config.name} via ${BRAND.name}`,
+    fromName: venue.config.name,
     ...renderEmail({
       brand: venue.config.name,
       preheader: `Use the till at ${venue.config.name} to stamp cards and give out rewards.`,
