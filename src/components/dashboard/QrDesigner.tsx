@@ -1,10 +1,10 @@
 "use client";
 
 import { Download, Nfc, Printer } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { sourceSlug } from "@/lib/qr-source";
-import { PRINT_FORMATS, PrintSheets, parseTables, sheetCount, type PrintFormat, type PrintVenue } from "./PrintSheets";
-import { Card, CopyButton, Field, HelpTip } from "./ui";
+import { PRINT_FORMATS, PrintSheets, parseTables, printFormats, sheetCount, type PrintFormat, type PrintVenue } from "./PrintSheets";
+import { Card, CopyButton, Field, HelpTip, SwitchRow } from "./ui";
 
 const COLORS = ["#000000", "#1F2A24", "#2F4A3A", "#1C2541", "#7A2E2E"];
 
@@ -23,9 +23,15 @@ export function QrDesigner({ venueId, guestUrl, printVenue }: { venueId: string;
   "use memo";
   const [label, setLabel] = useState("");
   const [color, setColor] = useState("#000000");
+  // A café numbers a card per table ("Table 1"…); a shop usually wants the same card a few times, unnumbered.
+  const [numbered, setNumbered] = useState(printVenue.food);
   const [tables, setTables] = useState("1-10");
   const [format, setFormat] = useState<PrintFormat>("a6");
-  const labels = useMemo(() => parseTables(tables), [tables]);
+  // Unnumbered copies: a full sheet of the chosen format until the owner picks a number.
+  const [copiesEdit, setCopies] = useState<number | null>(null);
+  const copies = copiesEdit ?? PRINT_FORMATS[format].perPage;
+  const cardLabels = (input: string) => (numbered ? parseTables(input, printVenue.spot) : Array.from({ length: copies }, () => ""));
+  const labels = cardLabels(tables);
   const sheets = sheetCount(format, labels.length);
   const source = sourceSlug(label);
   const qrUrl = (s: string, c: string) => `/api/dashboard/venues/${venueId}/qr?${new URLSearchParams({ ...(s ? { s } : {}), color: c })}`;
@@ -34,17 +40,17 @@ export function QrDesigner({ venueId, guestUrl, printVenue }: { venueId: string;
   const settledSource = useSettled(source);
   const settledColor = useSettled(color);
   const settledTables = useSettled(tables);
-  const sheetLabels = useMemo(() => parseTables(settledTables), [settledTables]);
+  const sheetLabels = cardLabels(settledTables);
   const link = source ? `${guestUrl}&s=${source}` : guestUrl;
 
   return (
     <>
       <div className="qr-grid no-print">
-        <Card title="Download a code" description="Print it on table cards, the counter, menus or the window.">
+        <Card title="Download a code" description="Print it on table cards, the counter, bills, bags or the window.">
           <div className="qr-download">
             <div>
-              <Field label="Where will this code go? (optional)" htmlFor="qr-label" hint={source ? `Scans will show as “${source}” in your stats.` : "Name it to see which spot gets the most scans, e.g. “Table 4” or “Window”."}>
-                <input id="qr-label" className="input" enterKeyHint="done" value={label} onChange={(event) => setLabel(event.target.value)} placeholder="Table 4" maxLength={60} />
+              <Field label="Where will this code go? (optional)" htmlFor="qr-label" hint={source ? `Scans will show as “${source}” in your stats.` : `Name it to see which spot gets the most scans, e.g. “${printVenue.spot} 2” or “Window”.`}>
+                <input id="qr-label" className="input" enterKeyHint="done" value={label} onChange={(event) => setLabel(event.target.value)} placeholder={`${printVenue.spot} 2`} maxLength={60} />
               </Field>
               <div className="field" style={{ marginTop: 14 }}>
                 <span className="field-label">Colour</span>
@@ -67,6 +73,9 @@ export function QrDesigner({ venueId, guestUrl, printVenue }: { venueId: string;
             <code>{link}</code>
             <CopyButton text={link} />
           </div>
+          <p className="hint" style={{ marginTop: 6 }}>
+            Share the link too: your Instagram bio, WhatsApp status or Google profile. Name it “Instagram” above to see those visits in your stats.
+          </p>
           <div className="inline" style={{ marginTop: 16 }}>
             <a className="btn btn-primary" href={`${qrBase}&format=png&size=2048&download=1`}>
               <Download aria-hidden /> PNG (print)
@@ -77,13 +86,17 @@ export function QrDesigner({ venueId, guestUrl, printVenue }: { venueId: string;
           </div>
         </Card>
 
-        <Card id="table-cards" title="Table cards" description="Cards, stickers and signs with a numbered code per table, in your colours. Print them straight from here.">
+        <Card
+          id="table-cards"
+          title={printVenue.food ? "Table cards" : "QR cards"}
+          description={`Cards, stickers${printVenue.wifi ? " and Wi-Fi signs" : ""} with your code, in your colours. Print them straight from here.`}
+        >
           <div className="field">
             <span className="field-label" id="print-format-label">
               Format
             </span>
             <div className="segmented print-format-pick" role="group" aria-labelledby="print-format-label">
-              {(Object.keys(PRINT_FORMATS) as PrintFormat[]).map((f) => (
+              {printFormats(printVenue).map((f) => (
                 <button key={f} type="button" aria-pressed={format === f} onClick={() => setFormat(f)}>
                   {PRINT_FORMATS[f].label}
                 </button>
@@ -92,16 +105,38 @@ export function QrDesigner({ venueId, guestUrl, printVenue }: { venueId: string;
             <p className="hint">{PRINT_FORMATS[format].hint}</p>
           </div>
           {format !== "wifi" && (
-            <Field label="Tables" htmlFor="qr-tables" hint="A range like 1-12, or a list like 1, 2, 5, Patio.">
-              <input id="qr-tables" className="input" enterKeyHint="done" value={tables} onChange={(event) => setTables(event.target.value)} maxLength={200} />
-            </Field>
+            <>
+              <SwitchRow
+                title={`Number each card (${printVenue.spot} 1, ${printVenue.spot} 2…)`}
+                description={`Shows which ${printVenue.spot.toLowerCase()} gets the most scans. Off: every card is the same.`}
+                checked={numbered}
+                onChange={setNumbered}
+              />
+              {numbered ? (
+                <Field label={`Which ${printVenue.spot.toLowerCase()}s?`} htmlFor="qr-tables" hint={printVenue.food ? "A range like 1-12, or a list like 1, 2, 5, Patio." : "A range like 1-3, or a list like 1, 2, Billing, Entrance."}>
+                  <input id="qr-tables" className="input" enterKeyHint="done" value={tables} onChange={(event) => setTables(event.target.value)} maxLength={200} />
+                </Field>
+              ) : (
+                <Field label="How many cards?" htmlFor="qr-copies">
+                  <input
+                    id="qr-copies"
+                    className="input qr-copies"
+                    type="number"
+                    min={1}
+                    max={100}
+                    value={copies}
+                    onChange={(event) => setCopies(Math.min(100, Math.max(1, Number(event.target.value) || 1)))}
+                  />
+                </Field>
+              )}
+            </>
           )}
           <div className="inline" style={{ marginTop: 14 }}>
             <button type="button" className="btn btn-primary" onClick={() => window.print()} disabled={(format !== "wifi" && labels.length === 0) || settledTables !== tables || settledColor !== color}>
               <Printer aria-hidden /> Print {sheets} sheet{sheets === 1 ? "" : "s"}
             </button>
-            {format !== "wifi" && (
-              <button type="button" className="btn" onClick={() => downloadNfcLinks(printVenue.name, guestUrl, labels)} disabled={labels.length === 0}>
+            {format !== "wifi" && numbered && (
+              <button type="button" className="btn" onClick={() => downloadNfcLinks(printVenue.name, guestUrl, labels, printVenue.spot)} disabled={labels.length === 0}>
                 <Nfc aria-hidden /> NFC links
               </button>
             )}
@@ -110,22 +145,22 @@ export function QrDesigner({ venueId, guestUrl, printVenue }: { venueId: string;
           <HelpTip question="How do I print them the right size?">
             <p>
               In the print window choose <strong>A4</strong> paper and set the scale to <strong>100%</strong> (sometimes called &ldquo;Actual size&rdquo;). Turn off &ldquo;Fit to page&rdquo;, or the codes print too small to
-              scan easily. Thick card (250gsm or more) stands up best in table holders.
+              scan easily. Thick card (250gsm or more) stands up best in holders.
             </p>
           </HelpTip>
-          {format !== "wifi" && (
+          {format !== "wifi" && numbered && (
             <HelpTip question="How do I write the NFC tags?">
               <ol>
                 <li>
-                  Tap <strong>NFC links</strong> to download every table&apos;s link (a spreadsheet: each table&apos;s NFC link beside its QR link).
+                  Tap <strong>NFC links</strong> to download every code&apos;s link (a spreadsheet: each NFC link beside its QR link).
                 </li>
                 <li>
-                  In the free <strong>NFC Tools</strong> app: <strong>Write → Add a record → URL</strong>, paste the table&apos;s NFC link, tap{" "}
+                  In the free <strong>NFC Tools</strong> app: <strong>Write → Add a record → URL</strong>, paste that spot&apos;s NFC link, tap{" "}
                   <strong>Write</strong> and hold the phone on an NTAG213/215 tag.
                 </li>
                 <li>Test it with another phone, then lock the tag (<strong>Other → Lock tag</strong>) so nobody can rewrite it.</li>
               </ol>
-              <p>Taps count towards the same table as its QR code. Keep the QR code on the table too.</p>
+              <p>Taps count towards the same spot as its QR code. Keep the QR code beside the tag too.</p>
               {isTemporaryAddress(guestUrl) && (
                 <p>
                   <strong>Write tags only from your live site:</strong> these links use a temporary address ({new URL(guestUrl).host}).
@@ -174,14 +209,14 @@ function csvCell(value: string): string {
  * onto its tag next to the QR link printed on its card, so each table's tag
  * and card match.
  */
-export function nfcLinksCsv(guestUrl: string, labels: string[]): string {
-  const rows = [["Table", "NFC link (write onto the tag)", "QR link (on the printed card)"]];
+export function nfcLinksCsv(guestUrl: string, labels: string[], spot = "Table"): string {
+  const rows = [[spot, "NFC link (write onto the tag)", "QR link (on the printed card)"]];
   for (const label of labels) rows.push([label, nfcTagLink(guestUrl, label), `${guestUrl}&s=${sourceSlug(label)}`]);
   return `${rows.map((row) => row.map(csvCell).join(",")).join("\r\n")}\r\n`;
 }
 
-function downloadNfcLinks(venueName: string, guestUrl: string, labels: string[]) {
-  const blob = new Blob([nfcLinksCsv(guestUrl, labels)], { type: "text/csv;charset=utf-8" });
+function downloadNfcLinks(venueName: string, guestUrl: string, labels: string[], spot: string) {
+  const blob = new Blob([nfcLinksCsv(guestUrl, labels, spot)], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;

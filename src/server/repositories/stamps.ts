@@ -8,7 +8,8 @@ import { getDb } from "../db";
  * history always adds up to the card's balance.
  */
 
-export type StampEventKind = "stamp" | "redeem" | "undo" | "feedback" | "bonus" | "referral" | "birthday";
+/** "welcome": a friend's welcome offer given; "referral": a reward earned for a friend; "referral_redeem": that reward given. */
+export type StampEventKind = "stamp" | "redeem" | "undo" | "feedback" | "bonus" | "referral" | "birthday" | "welcome" | "referral_redeem";
 
 export interface StampEvent {
   id: number;
@@ -50,7 +51,7 @@ export async function lastUndoableEvent(db: Db, cardId: string, withinMinutes: n
   return (
     ((await db.get(
         `SELECT * FROM stamp_events
-          WHERE card_id = ? AND kind IN ('stamp', 'redeem', 'birthday') AND undone_at IS NULL
+          WHERE card_id = ? AND kind IN ('stamp', 'redeem', 'birthday', 'welcome', 'referral_redeem') AND undone_at IS NULL
             AND created_at >= now() + CAST(? AS INTERVAL)
           ORDER BY id DESC LIMIT 1`, cardId, `-${withinMinutes} minutes`)) as StampEvent | undefined) ?? null
   );

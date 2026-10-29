@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { TillEnrollForm } from "@/components/staff/TillEnrollForm";
-import { birthdayAskOn, consentAgeThreshold, hasLoyaltyProgram } from "@/lib/venue/features";
+import { birthdayAskOn, consentAgeThreshold, hasTillCard } from "@/lib/venue/features";
 import { findVenue } from "@/server/repositories/venues";
 import { currentStaffDevice } from "@/server/services/staff";
 
@@ -12,7 +12,7 @@ export const metadata: Metadata = { title: "Add a member" };
 export default async function TillNewMemberPage() {
   const device = await currentStaffDevice();
   const venue = device ? await findVenue(device.venueId) : null;
-  if (!device || !venue || !hasLoyaltyProgram(venue)) {
+  if (!device || !venue || !hasTillCard(venue)) {
     return (
       <section className="till-message">
         <h1>Can&apos;t add members here</h1>

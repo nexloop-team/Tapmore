@@ -4,6 +4,7 @@ import { FileUp, Loader2, Sparkles } from "lucide-react";
 import { useRef, useState } from "react";
 import { dashboardApi, errorMessage } from "@/lib/api/dashboard-client";
 import { compressImage } from "@/lib/browser";
+import type { BusinessProfile } from "@/lib/venue/business";
 import type { VenueConfig } from "@/lib/venue/schema";
 import { useConfirm } from "./confirm";
 
@@ -15,7 +16,7 @@ type Section = VenueConfig["menus"][number]["sections"][number];
  * owner reviews here and then saves with the normal save bar.
  */
 /** Big enough to read small menu print, small enough for every provider's upload limit. */
-async function shrinkForUpload(file: File): Promise<File> {
+export async function shrinkForUpload(file: File): Promise<File> {
   if (file.type === "application/pdf") return file;
   try {
     const { base64 } = await compressImage(file, 2000, 0.85);
@@ -28,12 +29,15 @@ async function shrinkForUpload(file: File): Promise<File> {
 
 export function MenuAiTools({
   venueId,
+  words,
   importLimits,
   sections,
   onImport,
   onExplanations,
 }: {
   venueId: string;
+  /** The business's words and whether it's food (only food gets "Explain unusual dishes"). */
+  words: BusinessProfile;
   /** What the server's AI provider can read: some take PDFs and more photos than others. */
   importLimits: { maxImages: number; pdf: boolean };
   sections: Section[];
@@ -60,7 +64,9 @@ export function MenuAiTools({
         <strong className="ai-title">
           Import from a photo{importLimits.pdf ? " or PDF" : ""}
         </strong>
-        <p>Snap your printed menu. We&apos;ll read the dishes and prices, and you check them before anything goes live.</p>
+        <p>
+          Snap your printed {words.foodFields ? "menu" : "price list or board"}. We&apos;ll read the {words.items} and prices, and you check them before anything goes live.
+        </p>
       </div>
     </div>
   );
@@ -129,10 +135,10 @@ export function MenuAiTools({
         {busy === "import" ? (
           <>
             <div className="spread">
-              <strong>Reading your menu…</strong>
+              <strong>Reading your {words.foodFields ? "menu" : "price list"}…</strong>
               <Loader2 className="spin" aria-hidden />
             </div>
-            <div className="progress indeterminate" role="progressbar" aria-label="Reading your menu">
+            <div className="progress indeterminate" role="progressbar" aria-label="Reading the photo">
               <div />
             </div>
             <span className="hint">This usually takes under a minute. Keep this page open.</span>
@@ -160,23 +166,25 @@ export function MenuAiTools({
         />
       </div>
       <div className="ai-explain">
-        <span className="hint">Drafts only: nothing reaches guests until you review it and save.</span>
-        <button type="button" className="btn btn-sm" disabled={!!busy || unexplained.length === 0} onClick={runExplain}>
-          {busy === "explain" ? <Loader2 className="spin" aria-hidden /> : <Sparkles aria-hidden />}
-          {busy === "explain" ? "Thinking…" : "Explain unusual dishes"}
-        </button>
+        <span className="hint">Drafts only: nothing reaches {words.people} until you review it and save.</span>
+        {words.foodFields && (
+          <button type="button" className="btn btn-sm" disabled={!!busy || unexplained.length === 0} onClick={runExplain}>
+            {busy === "explain" ? <Loader2 className="spin" aria-hidden /> : <Sparkles aria-hidden />}
+            {busy === "explain" ? "Thinking…" : "Explain unusual dishes"}
+          </button>
+        )}
       </div>
       {error && <p className="field-error ai-wide">{error}</p>}
 
       {imported && (
         <div className="notice notice-info" style={{ display: "block", marginTop: 14 }}>
           <strong>
-            Found {importedCount} dish{importedCount === 1 ? "" : "es"} in {imported.sections.length} section{imported.sections.length === 1 ? "" : "s"}:
+            Found {importedCount} {importedCount === 1 ? words.item : words.items} in {imported.sections.length} section{imported.sections.length === 1 ? "" : "s"}:
           </strong>{" "}
           {imported.sections.map((s) => `${s.name} (${s.items.length})`).join(", ")}.
           {imported.flaggedItemIds.length > 0 && (
             <p style={{ marginTop: 6 }}>
-              {imported.flaggedItemIds.length} dish{imported.flaggedItemIds.length === 1 ? " has" : "es have"} suggested allergens, marked <span className="badge badge-warn">Check allergens</span>. Please check each one before saving.
+              {imported.flaggedItemIds.length} {imported.flaggedItemIds.length === 1 ? `${words.item} has` : `${words.items} have`} suggested allergens, marked <span className="badge badge-warn">Check allergens</span>. Please check each one before saving.
             </p>
           )}
           <div className="inline" style={{ marginTop: 10 }}>
@@ -188,19 +196,19 @@ export function MenuAiTools({
                 setImported(null);
               }}
             >
-              Add to this menu
+              Add to this list
             </button>
             {sections.length > 0 && (
               <button
                 type="button"
                 className="btn btn-sm"
                 onClick={async () => {
-                  if (!(await ask({ title: "Replace this menu?", body: "Every section of this menu is swapped for the imported one.", confirmLabel: "Replace menu", danger: true }))) return;
+                  if (!(await ask({ title: `Replace this ${words.catalogue.toLowerCase()}?`, body: "Every section is swapped for the imported ones.", confirmLabel: "Replace", danger: true }))) return;
                   onImport(imported.sections, "replace", imported.flaggedItemIds);
                   setImported(null);
                 }}
               >
-                Replace this menu
+                Replace everything
               </button>
             )}
             <button type="button" className="btn btn-ghost btn-sm" onClick={() => setImported(null)}>

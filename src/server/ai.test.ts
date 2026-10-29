@@ -117,3 +117,41 @@ describe("Groq", () => {
     await expect(ai.importMenu("ven_ai4", [{ mediaType: "image/png", base64: "AAAA" }])).rejects.toThrow(/too much/);
   });
 });
+
+describe("prompts follow the kind of business", () => {
+  const systemOf = (calls: ReturnType<typeof mockGroq>) => (calls[0].body.messages as { role: string; content: string }[])[0].content;
+
+  it("review replies speak about a salon, not a café", async () => {
+    process.env.GROQ_API_KEY = "gsk_test";
+    const calls = mockGroq(JSON.stringify({ reply: "Thanks, Priya!" }));
+    await ai.draftReviewReply({ id: "ven_ai5", name: "Glow", venueType: "salon" }, { stars: 5, text: "Great haircut", reviewerFirstName: "Priya" }, "");
+    expect(systemOf(calls)).toContain("a Google review of their salon");
+    expect(systemOf(calls)).not.toMatch(/café|restaurant or bar/);
+    expect(systemOf(calls)).not.toContain("healthcare business");
+  });
+
+  it("clinic replies never confirm a patient or mention health", async () => {
+    process.env.GROQ_API_KEY = "gsk_test";
+    const calls = mockGroq(JSON.stringify({ reply: "Thank you for your feedback." }));
+    await ai.draftReviewReply({ id: "ven_ai6", name: "City Care", venueType: "clinic" }, { stars: 2, text: "Long wait for my blood test", reviewerFirstName: null }, "");
+    expect(systemOf(calls)).toContain("Never confirm or imply that the reviewer is or was a patient");
+    expect(systemOf(calls)).toContain("never mention any health condition");
+  });
+
+  it("a shop's photo import reads a price list, with no food fields", async () => {
+    process.env.GROQ_API_KEY = "gsk_test";
+    const calls = mockGroq(JSON.stringify({ sections: [{ name: "Offers", items: [{ name: "Rice 5 kg", description: null, price: 749, dietaryTags: [], allergens: [], foodType: null }] }] }));
+    await ai.importMenu("ven_ai7", [{ mediaType: "image/jpeg", base64: "AAAA" }], false);
+    expect(systemOf(calls)).toContain("price list");
+    expect(systemOf(calls)).not.toContain("veg / non-veg mark");
+    expect(systemOf(calls)).toContain("allergens: always empty lists");
+  });
+
+  it("feedback summaries use the business's words", async () => {
+    process.env.GROQ_API_KEY = "gsk_test";
+    const calls = mockGroq(JSON.stringify({ headline: "Mostly happy", praise: [], problems: [], suggestion: "" }));
+    await ai.summarizeFeedback({ id: "ven_ai8", name: "Sharma", venueType: "shop" }, [{ text: "Helpful staff", mood: "good", day: "2026-10-28" }]);
+    expect(systemOf(calls)).toContain("the owner of a shop");
+    expect(systemOf(calls)).toContain("their customers left this week");
+  });
+});

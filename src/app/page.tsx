@@ -23,23 +23,25 @@ const DEMO_NOTES: Record<string, string> = {
   demo: "Stamp card, menu with photos, Sudoku",
   "demo-crm": "Bento tiles, Indian menu with veg marks, Wi-Fi email gate",
   "demo-rewards": "Members club, order online, colours from the logo",
+  "demo-salon": "Services with “From” prices, booking link, stamp per visit",
+  "demo-shop": "Featured products and offers, stamp per ₹500 spent",
 };
 
 const FEATURES = [
-  { icon: BookOpen, tint: "orange", title: "A menu that's always right", text: "Change a price in seconds. Photos, allergens and today's specials included." },
+  { icon: BookOpen, tint: "orange", title: "Your menu or price list, always right", text: "Change a price in seconds. Photos, offers, “From” prices and today's specials included." },
   { icon: Wifi, tint: "green", title: "Wi-Fi without the questions", text: "Guests copy the password in one tap. Ask for an email first if you like." },
   { icon: Heart, tint: "rose", title: "A stamp card nobody loses", text: "Digital stamps, rewards and birthday treats. Staff stamp from any phone." },
   { icon: MessageCircle, tint: "blue", title: "Hear it first", text: "Guests tell you what went wrong in private, before it becomes a public review." },
   { icon: Star, tint: "amber", title: "More Google reviews, all answered", text: "Guests get a friendly invite to review you. Connect Google and every review gets a reply in your name." },
   { icon: Users, tint: "purple", title: "Know your regulars", text: "See who visits and how often. Export your guest list whenever you need it." },
-  { icon: Printer, tint: "teal", title: "Print and you're done", text: "Table cards print at home. See which tables scan the most." },
+  { icon: Printer, tint: "teal", title: "Print and you're done", text: "QR cards print at home, for tables, counters and windows. See which spots scan the most." },
   { icon: Palette, tint: "clay", title: "Looks like your place", text: `Your colour, your logo, your fonts. No ${BRAND.name} logo on your page.` },
 ];
 
 const STEPS = [
-  { title: "Sign up and answer four questions", text: "Your venue's name, a colour, the Wi-Fi and a reward. Your page is live straight after." },
-  { title: "Add your menu and logo", text: "Type it in, or take a photo of your printed menu and we'll read it for you." },
-  { title: "Print your QR codes", text: "Table cards print on any home printer. Put one on every table and you're done." },
+  { title: "Sign up and answer four questions", text: "Your business's name and type, a colour, and a reward. Your page is live straight after." },
+  { title: "Add your menu, products or services", text: "Type them in, or take a photo of your printed menu or price list and we'll read it for you." },
+  { title: "Print your QR codes", text: "QR cards print on any home printer. Put one on every table or counter and you're done." },
 ];
 
 const REASONS = [
@@ -50,21 +52,21 @@ const REASONS = [
 
 const FAQS = [
   {
-    q: "Do guests need to download an app?",
+    q: "Do my customers need to download an app?",
     a: "No. They scan the code with their phone camera and the page opens straight away. No app, no sign-up, and it loads quickly even on a slow 4G connection.",
   },
   {
     q: "What happens after the 7-day trial?",
-    a: "Subscribe to keep your page live. If you don't, it pauses and guests see a friendly “back soon” page. Your menu, guests and stamp cards stay safe, and everything comes back the moment you subscribe.",
+    a: "Subscribe to keep your page live. If you don't, it pauses and guests see a friendly “back soon” page. Your menu, customers and stamp cards stay safe, and everything comes back the moment you subscribe.",
   },
   {
     q: "How do Google review replies work?",
     a: `Connect your Google Business Profile once from the dashboard. ${BRAND.name} then shows your Google reviews with a reply ready: replies to 4–5★ reviews can go out automatically, and 1–3★ ones wait for you to check. They appear on Google as the owner's response. ${BRAND.name} only reads your reviews and posts the replies you allow, and you can disconnect any time.`,
   },
-  { q: "How do I pay?", a: `Through Razorpay, with UPI, a card or netbanking. It's ${priceSentence()}, for each venue.` },
+  { q: "How do I pay?", a: `Through Razorpay, with UPI, a card or netbanking. It's ${priceSentence()}, for each business.` },
   {
-    q: "I run two cafés. Do I need two plans?",
-    a: "Each venue has its own page, QR codes and stamp card, and its own ₹999 yearly subscription. You manage them all from one login.",
+    q: "I run two shops or cafés. Do I need two plans?",
+    a: "Each business has its own page, QR codes and stamp card, and its own ₹999 yearly subscription. You manage them all from one login.",
   },
   {
     q: "Can my staff stamp cards without seeing my dashboard?",
@@ -95,10 +97,10 @@ export default function Home() {
         <section className="mk-wrap hero">
           <div className="hero-copy">
             <span className="mk-eyebrow mk-pill">
-              <span className="mk-dot" aria-hidden /> For cafés, pubs, bakeries and small restaurants
+              <span className="mk-dot" aria-hidden /> For cafés, shops, salons, clinics and every local business
             </span>
-            <h1>One QR code for everything your guests need at the table.</h1>
-            <p className="lede">Your menu, the Wi-Fi password, a stamp card and a private feedback box, on one page that looks like your place. Set it up yourself in ten minutes.</p>
+            <h1>One QR code for everything your customers need.</h1>
+            <p className="lede">Your menu or price list, a stamp card, a private feedback box, Google reviews and the Wi-Fi, on one page that looks like your business. Set it up yourself in ten minutes.</p>
             <div className="cta">
               <StartLink className="mk-btn mk-btn-lg mk-btn-accent" />
               <a className="mk-btn mk-btn-lg mk-btn-outline" href="#demos">
@@ -225,8 +227,8 @@ export default function Home() {
         </section>
 
         <section className="mk-wrap mk-section" id="demos">
-          <h2>Try a demo venue</h2>
-          <p className="mk-sub">Open one on your phone. It&apos;s exactly what your guests would see.</p>
+          <h2>Try a demo</h2>
+          <p className="mk-sub">Cafés, a salon and a shop. Open one on your phone: it&apos;s exactly what your customers would see.</p>
           <div className="demo-strip">
             {DEMO_VENUES.map((venue) => {
               const bg = venue.branding.backgroundColorHex || "#FFFFFF";
@@ -265,7 +267,7 @@ export default function Home() {
         </section>
 
         <section className="mk-wrap mk-cta-band">
-          <h2>Your tables are ready when you are.</h2>
+          <h2>Your QR codes are ready when you are.</h2>
           <p>
             {TRIAL_DAYS} days free, no card needed. {formatInr(PRICE_INR)} a year after that.
           </p>
@@ -276,7 +278,7 @@ export default function Home() {
       <footer className="site-footer">
         <div className="mk-wrap">
           <span>
-            © <Year /> {BRAND.name} · Made for independent hospitality
+            © <Year /> {BRAND.name} · Made for independent local businesses
           </span>
           <nav aria-label="Footer">
             <Link href="/about">About</Link>

@@ -23,16 +23,16 @@ export default async function AboutPage() {
   return (
     <LegalPage path="/about" title={`About ${BRAND.name}`} dated={false}>
       <p>
-        {BRAND.name} gives independent cafés, restaurants and bars one page that every table&apos;s QR code opens: the menu, the Wi-Fi, a
-        digital loyalty card, a private feedback box and an invitation to leave a Google review. Owners set it up themselves in about ten
-        minutes, with no app for guests to download.
+        {BRAND.name} gives independent local businesses (cafés, restaurants, shops, salons, clinics, gyms and more) one page that their QR
+        codes open: the menu or price list, a digital loyalty card, a private feedback box, an invitation to leave a Google review and the
+        Wi-Fi. Owners set it up themselves in about ten minutes, with no app for customers to download.
       </p>
 
       <h2>Why we built it</h2>
       <p>
-        Small venues already pay for printed menus, paper stamp cards and review cards that get lost. {BRAND.name} puts all of them on the
-        guest&apos;s own phone, helps venues hear from unhappy guests privately before they leave a bad review, and turns one-off visitors into
-        regulars the venue can reach again, with their permission.
+        Small businesses already pay for printed menus and price lists, paper stamp cards and review cards that get lost. {BRAND.name} puts all
+        of them on the customer&apos;s own phone, helps businesses hear from unhappy customers privately before they leave a bad review, and
+        turns one-off visitors into regulars the business can reach again, with their permission.
       </p>
 
       <h2>What&apos;s included</h2>

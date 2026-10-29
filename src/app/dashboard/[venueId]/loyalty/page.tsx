@@ -24,6 +24,7 @@ export default async function LoyaltyPage({ params }: PageProps<"/dashboard/[ven
         </div>
       </div>
       <LoyaltyEditor
+        venueType={venue.config.venueType}
         venueId={venue.id}
         initial={{ loyaltyProgram: program ?? null, crm }}
         referralStats={referrals}

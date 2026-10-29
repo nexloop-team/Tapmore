@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { api } from "@/lib/api/client";
 import type { FeedbackResponse } from "@/lib/api/contracts";
 import { Field } from "../forms";
+import { businessProfile } from "@/lib/venue/business";
 import { FEEDBACK_TEXTAREA_ID, useLanding } from "../LandingContext";
 import { FeedbackThankYou } from "./FeedbackThankYou";
 import { PhotoAttach, type AttachedPhoto } from "./PhotoAttach";
@@ -58,6 +59,8 @@ export function FeedbackSheet() {
   return (
     <div className="sheet-inner">
       <p className="sheet-intro">{t("share_thoughts")}</p>
+      {/* Clinics and pharmacies: feedback isn't the place for medical details. */}
+      {businessProfile(venue.venueType).professionalRules && <p className="sheet-intro sheet-rule">{t("feedback_no_health")}</p>}
       <div className="form-stack">
         <Field label={t("your_message")}>
           <textarea

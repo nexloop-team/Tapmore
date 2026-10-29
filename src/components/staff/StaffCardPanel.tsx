@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Cake, Check, ChevronLeft, Gift, Loader2, Minus, Plus, Undo2 } from "lucide-react";
+import { AlertTriangle, Cake, Check, ChevronLeft, Gift, Loader2, Minus, Plus, Undo2, UserPlus } from "lucide-react";
 import Link from "next/link";
 import { useOffline } from "next/offline";
 import { useEffect, useState } from "react";
@@ -127,8 +127,10 @@ export function StaffCardPanel({ initial }: { initial: StaffCardView }) {
         setMessage({ tone: "ok", text: "Undone." });
       },
       undefined,
-      { action: { kind: "undo" }, local: { ...withStamps(card, Math.max(0, card.stamps - (card.undoable?.delta ?? 0))), undoable: null }, after: () => setStamped(null) },
+      // Refer-a-friend offers aren't kept on the till offline: what an undo gives back is the server's to work out.
+      card.offers ? undefined : { action: { kind: "undo" }, local: { ...withStamps(card, Math.max(0, card.stamps - (card.undoable?.delta ?? 0))), undoable: null }, after: () => setStamped(null) },
     );
+  const offers = card.offers;
 
   const unlocked = card.tiers.filter((tier) => tier.unlocked);
   const nextTier = card.tiers.find((tier) => !tier.unlocked);
@@ -198,17 +200,24 @@ export function StaffCardPanel({ initial }: { initial: StaffCardView }) {
             )}
           </div>
         </div>
-        <div className="till-count-row">
-          <span className="till-card-count" aria-live="polite">
-            {card.stamps}
-            <span> of {card.goal} stamps</span>
-          </span>
-          {topTier && (
-            <span className="till-goal">
-              {topTier.rewardName} at {topTier.stampsRequired}
-            </span>
-          )}
-        </div>
+        {offers ? (
+          <p className="till-rule">Refer a friend: {offers.member} for each friend they invite who visits.</p>
+        ) : (
+          <>
+            <div className="till-count-row">
+              <span className="till-card-count" aria-live="polite">
+                {card.stamps}
+                <span> of {card.goal} stamps</span>
+              </span>
+              {topTier && (
+                <span className="till-goal">
+                  {topTier.rewardName} at {topTier.stampsRequired}
+                </span>
+              )}
+            </div>
+            {card.stampRule && <p className="till-rule">{card.stampRule}</p>}
+          </>
+        )}
         {birthdayEdit && (
           <form
             className="till-birthday-edit"
@@ -248,7 +257,25 @@ export function StaffCardPanel({ initial }: { initial: StaffCardView }) {
             </button>
           </form>
         )}
-        {card.goal > 0 && (
+        {offers?.welcome && (
+          <div className="till-ready">
+            <UserPlus aria-hidden />
+            <span>
+              <strong>Invited by a friend: first visit</strong>
+              <span>{offers.welcome}</span>
+            </span>
+          </div>
+        )}
+        {offers && offers.ready > 0 && (
+          <div className="till-ready">
+            <Gift aria-hidden />
+            <span>
+              <strong>{offers.ready === 1 ? "Friend reward ready" : `${offers.ready} friend rewards ready`}</strong>
+              <span>{offers.member}</span>
+            </span>
+          </div>
+        )}
+        {!offers && card.goal > 0 && (
           <ol className="till-dots" style={{ gridTemplateColumns: `repeat(${Math.min(card.goal, DOTS_PER_ROW)}, minmax(0, 1fr))` }} aria-hidden>
             {Array.from({ length: Math.min(card.goal, 30) }, (_, i) => (
               <li key={i} className={i < card.stamps ? "on" : ""} />
@@ -275,9 +302,9 @@ export function StaffCardPanel({ initial }: { initial: StaffCardView }) {
         ))}
       </section>
 
-      {card.stampedMinutesAgo !== null && !confirmAnother && (
+      {!offers && card.stampedMinutesAgo !== null && !confirmAnother && (
         <p className="till-hint till-recent">
-          Stamped {card.stampedMinutesAgo === 0 ? "just now" : `${card.stampedMinutesAgo} minute${card.stampedMinutesAgo === 1 ? "" : "s"} ago`}. Only add another if they&apos;ve bought a second drink.
+          Stamped {card.stampedMinutesAgo === 0 ? "just now" : `${card.stampedMinutesAgo} minute${card.stampedMinutesAgo === 1 ? "" : "s"} ago`}. Only add another if they&apos;ve made a second purchase.
         </p>
       )}
       {message && (
@@ -295,6 +322,60 @@ export function StaffCardPanel({ initial }: { initial: StaffCardView }) {
         </div>
       )}
 
+      {offers ? (
+        <div className="till-actions">
+          {offers.welcome && (
+            <button
+              type="button"
+              className="staff-btn staff-btn-primary staff-btn-xl"
+              disabled={busy}
+              onClick={() =>
+                void act(
+                  (requestId) => dashboardApi.staffWelcome({ cardId: card.cardId, requestId }),
+                  () => setMessage({ tone: "ok", text: `${offers.welcome}: given. Welcome, ${name}!` }),
+                )
+              }
+            >
+              {busy ? <Loader2 className="spin" aria-hidden /> : <UserPlus aria-hidden />} Give welcome offer
+            </button>
+          )}
+          {offers.ready > 0 && (
+            <button
+              type="button"
+              className="staff-btn staff-btn-secondary"
+              disabled={busy}
+              onClick={() =>
+                void act(
+                  (requestId) => dashboardApi.staffFriendReward({ cardId: card.cardId, requestId }),
+                  () => setMessage({ tone: "ok", text: `${offers.member}: given. Thanks for the invite, ${name}!` }),
+                )
+              }
+            >
+              <Gift aria-hidden /> Give friend reward
+            </button>
+          )}
+          {!offers.welcome && offers.ready === 0 && <p className="till-hint">Nothing to give today. Rewards show here when a friend they invited makes a first visit.</p>}
+          {card.birthday && !card.birthday.given && (
+            <button
+              type="button"
+              className="staff-btn staff-btn-secondary"
+              disabled={busy}
+              onClick={() => {
+                const reward = card.birthday!.reward;
+                void act(
+                  () => dashboardApi.staffBirthday({ cardId: card.cardId }),
+                  () => setMessage({ tone: "ok", text: `${reward}: given. Happy birthday, ${name}!` }),
+                );
+              }}
+            >
+              <Cake aria-hidden /> Give birthday reward
+            </button>
+          )}
+          <button type="button" className="staff-btn staff-btn-ghost till-undo" disabled={busy || !card.undoable} onClick={undo}>
+            <Undo2 aria-hidden /> Undo
+          </button>
+        </div>
+      ) : (
       <div className="till-actions">
         {room === 0 ? (
           <p className="till-hint">This card is full. Redeem the reward to start collecting again.</p>
@@ -366,6 +447,7 @@ export function StaffCardPanel({ initial }: { initial: StaffCardView }) {
           </button>
         </div>
       </div>
+      )}
     </div>
   );
 }

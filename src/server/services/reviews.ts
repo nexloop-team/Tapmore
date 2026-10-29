@@ -22,7 +22,7 @@ import {
 } from "../repositories/google-reviews";
 import type { User } from "../repositories/users";
 import { venueHasAccess } from "../repositories/subscriptions";
-import { getVenueRecord, getVenueSettings, isManagerRole, venueOwnerEmails, venueRole } from "../repositories/venues";
+import { getVenueRecord, getVenueSettings, isManagerRole, updateVenueConfig, venueOwnerEmails, venueRole } from "../repositories/venues";
 import { aiConfigured, draftReviewReply } from "./ai";
 import {
   authUrl,
@@ -92,6 +92,8 @@ export interface LocationChoice {
   location: string;
   title: string;
   address: string;
+  /** The profile's "leave a review" link, from Google. */
+  reviewUrl: string | null;
 }
 
 /** Every Business Profile the connected Google account manages, for the owner to pick theirs. */
@@ -107,6 +109,7 @@ export async function locationChoices(venueId: string): Promise<LocationChoice[]
         location: location.name,
         title: location.title || "Untitled business",
         address: [...(location.storefrontAddress?.addressLines ?? []), location.storefrontAddress?.locality].filter(Boolean).join(", "),
+        reviewUrl: location.metadata?.newReviewUri && /^https:\/\//.test(location.metadata.newReviewUri) ? location.metadata.newReviewUri : null,
       });
     }
   }
@@ -118,6 +121,7 @@ export async function chooseLocation(venueId: string, account: string, location:
   const choice = (await locationChoices(venueId)).find((c) => c.account === account && c.location === location);
   if (!choice) throw new ServiceError(400, "That Business Profile isn't on the connected Google account");
   await linkLocation(venueId, account, location, choice.title);
+  await adoptReviewLink(venueId, choice.reviewUrl);
   const connection = (await getConnection(venueId))!;
   try {
     await enableReviewAlerts(open(connection.refreshTokenEnc), account);
@@ -126,6 +130,22 @@ export async function chooseLocation(venueId: string, account: string, location:
     console.error("[reviews] couldn't turn on Google alerts", error);
   }
   await syncVenue(venueId, { imported: true });
+}
+
+/**
+ * The guest page's "Leave a Google review" button, set up from the profile
+ * itself, so the owner never has to find and paste the link. A link the
+ * owner already set is left alone.
+ */
+async function adoptReviewLink(venueId: string, reviewUrl: string | null) {
+  if (!reviewUrl) return;
+  const venue = await getVenueRecord(venueId);
+  if (!venue || venue.config.socialLinks.google) return;
+  await updateVenueConfig(venueId, {
+    ...venue.config,
+    socialLinks: { ...venue.config.socialLinks, google: reviewUrl },
+    branding: { ...venue.config.branding, showGoogleReviewButton: true },
+  });
 }
 
 /** Takes the access back on Google's side and keeps nothing read from it. */
@@ -207,7 +227,7 @@ export async function syncVenue(venueId: string, options: { imported?: boolean }
     if (!isNew) continue;
     added += 1;
     if (!live || stored.state === "replied") continue;
-    if (await respond(venueId, venue!.config.name, stored, firstName(review), settings, connection)) posted += 1;
+    if (await respond(venueId, venue!.config.name, venue!.config.venueType, stored, firstName(review), settings, connection)) posted += 1;
   }
   await markSynced(venueId);
   return { added, posted };
@@ -217,6 +237,7 @@ export async function syncVenue(venueId: string, options: { imported?: boolean }
 async function respond(
   venueId: string,
   venueName: string,
+  venueType: string | null | undefined,
   review: StoredReview,
   reviewerFirstName: string | null,
   settings: { autoReply: boolean; autoReplyCritical: boolean; signOff: string },
@@ -225,7 +246,7 @@ async function respond(
   let draft: string | null = null;
   if (aiConfigured()) {
     try {
-      draft = await draftReviewReply({ id: venueId, name: venueName }, { stars: review.stars, text: review.comment, reviewerFirstName }, settings.signOff);
+      draft = await draftReviewReply({ id: venueId, name: venueName, venueType }, { stars: review.stars, text: review.comment, reviewerFirstName }, settings.signOff);
     } catch (error) {
       console.error("[reviews] draft failed", error);
     }
@@ -284,7 +305,11 @@ export async function redraft(venueId: string, reviewId: string): Promise<Stored
   const venue = await getVenueRecord(venueId);
   const settings = (await getVenueSettings(venueId)).reviews;
   const first = review.reviewerName?.trim().split(/\s+/)[0] ?? null;
-  const draft = await draftReviewReply({ id: venueId, name: venue?.config.name ?? "" }, { stars: review.stars, text: review.comment, reviewerFirstName: first }, settings.signOff);
+  const draft = await draftReviewReply(
+    { id: venueId, name: venue?.config.name ?? "", venueType: venue?.config.venueType },
+    { stars: review.stars, text: review.comment, reviewerFirstName: first },
+    settings.signOff,
+  );
   await saveDraft(venueId, review.id, draft, review.state === "replied" ? "replied" : "awaiting");
   return (await getStoredReview(venueId, review.id))!;
 }

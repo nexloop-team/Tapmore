@@ -4,6 +4,8 @@ import { OnboardingWizard } from "@/components/dashboard/OnboardingWizard";
 import { ResendVerification } from "@/components/dashboard/Shell";
 import { isAdmin, isListedSuperAdmin, requireUser } from "@/server/auth/session";
 import { listVenuesForUser } from "@/server/repositories/venues";
+import { aiConfigured, aiImportLimits } from "@/server/services/ai";
+import { googleConfigured } from "@/server/services/google";
 import { uiFont } from "@/app/fonts";
 import { firstParam } from "@/server/request";
 import "@/styles/app.css";
@@ -11,7 +13,7 @@ import "@/styles/app.css";
 // Blocks on purpose (Cache Components): the setup wizard is for the signed-in owner; it waits for that check.
 export const instant = false;
 
-export const metadata: Metadata = { title: "Set up your venue" };
+export const metadata: Metadata = { title: "Set up your business" };
 
 export default async function OnboardingPage({ searchParams }: PageProps<"/onboarding">) {
   const user = await requireUser();
@@ -26,10 +28,12 @@ export default async function OnboardingPage({ searchParams }: PageProps<"/onboa
       <OnboardingWizard
         // We sell in India: rupees first, whatever language the browser is set to (many Indian phones say en-US).
         defaultCurrency="INR"
+        google={googleConfigured()}
+        aiImport={aiConfigured() ? aiImportLimits() : null}
         exitHref={hasVenues ? "/dashboard" : isAdmin(user) ? "/admin" : null}
         notice={
           <>
-            {verified === "1" && <div className="notice notice-ok">Your email is confirmed. Thanks! Now let&apos;s set up your venue.</div>}
+            {verified === "1" && <div className="notice notice-ok">Your email is confirmed. Thanks! Now let&apos;s set up your business.</div>}
             {verified === "0" && <div className="notice notice-error">That confirmation link has expired or was already used.</div>}
             {adminUnconfirmed && (
               <div className="notice notice-info">

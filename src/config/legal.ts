@@ -83,4 +83,4 @@ export function missingLegalDetails(): string[] {
 }
 
 /** Shown at the top of every legal page; change it whenever a policy's wording changes. */
-export const POLICIES_UPDATED = "26 October 2026";
+export const POLICIES_UPDATED = "29 October 2026";

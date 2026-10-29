@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
-import { resolvedTagline, resolvedTitle, safeImageUrl } from "@/lib/venue/features";
+import { coverImages, resolvedTagline, resolvedTitle, safeImageUrl } from "@/lib/venue/features";
 import type { VenueBranding } from "@/lib/venue/types";
+import { CoverSlides } from "./CoverSlides";
 
 /**
  * The venue's cover, logo, name and tagline: the top of the guest page and
@@ -20,8 +21,10 @@ export function VenueHeader({
   /** Guest page: the name big and bold over the cover, like a poster, arranged by the header style. */
   poster?: boolean;
 }) {
-  const cover = safeImageUrl(branding.coverImageUrl);
-  const logo = safeImageUrl(branding.logoUrl);
+  const covers = coverImages(branding);
+  const cover = covers.length > 0;
+  // "No logo" in the header style hides it in both headers (it still marks the browser tab and printed cards).
+  const logo = branding.headerStyle === "minimal" ? null : safeImageUrl(branding.logoUrl);
   const title = resolvedTitle(branding, name);
   const line = tagline ? resolvedTagline(branding) : null;
 
@@ -32,8 +35,7 @@ export function VenueHeader({
       <header className={`venue-header poster poster-align-${arrangement}${cover ? "" : " no-cover"}${showLogo ? " has-logo" : ""}`}>
         {cover && (
           <div className="poster-cover">
-            {/* eslint-disable-next-line @next/next/no-img-element -- merchant image on any host */}
-            <img src={cover} alt="" fetchPriority="high" />
+            <CoverSlides images={covers} />
           </div>
         )}
         {overlay}
@@ -59,8 +61,7 @@ export function VenueHeader({
     <header className="venue-header">
       {cover && (
         <div className="cover">
-          {/* eslint-disable-next-line @next/next/no-img-element -- merchant image on any host */}
-          <img src={cover} alt="" fetchPriority="high" />
+          <CoverSlides images={covers} />
         </div>
       )}
       {overlay}

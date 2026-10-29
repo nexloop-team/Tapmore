@@ -58,6 +58,35 @@ export async function referralRewardsInLast(db: Db, referrerCardId: string, days
   ).n;
 }
 
+/**
+ * Refer-a-friend offers on one card: the welcome offer while an invited
+ * friend hasn't had it, and how many friend rewards the member has earned
+ * but not yet been given.
+ */
+export async function referralOfferState(db: Db, cardId: string): Promise<{ welcomeOpen: boolean; ready: number }> {
+  const row = (await db.get(
+    `SELECT (c.referred_by_card_id IS NOT NULL AND c.referral_rewarded_at IS NULL) AS welcome_open,
+            (SELECT COUNT(*) FROM stamp_events e WHERE e.card_id = c.id AND e.kind = 'referral' AND e.undone_at IS NULL)
+          - (SELECT COUNT(*) FROM stamp_events e WHERE e.card_id = c.id AND e.kind = 'referral_redeem' AND e.undone_at IS NULL) AS ready
+       FROM loyalty_cards c WHERE c.id = ?`,
+    cardId,
+  )) as { welcome_open: boolean | number; ready: number } | undefined;
+  return { welcomeOpen: !!row?.welcome_open, ready: Math.max(0, Number(row?.ready ?? 0)) };
+}
+
+/** Undoing a friend's welcome offer: the visit no longer counts, so the inviter's reward for it goes too. */
+export async function reopenWelcome(db: Db, friendCardId: string, since: string) {
+  const row = (await db.get("SELECT referred_by_card_id FROM loyalty_cards WHERE id = ?", friendCardId)) as { referred_by_card_id: string | null } | undefined;
+  (await db.run("UPDATE loyalty_cards SET referral_rewarded_at = NULL WHERE id = ?", friendCardId));
+  if (!row?.referred_by_card_id) return;
+  (await db.run(
+    `UPDATE stamp_events SET undone_at = now()
+      WHERE id = (SELECT id FROM stamp_events WHERE card_id = ? AND kind = 'referral' AND undone_at IS NULL AND created_at >= ? ORDER BY id LIMIT 1)`,
+    row.referred_by_card_id,
+    since,
+  ));
+}
+
 /** For the owner: friends who joined through an invite, and how many of those have visited. */
 export async function referralStats(venueId: string): Promise<{ joined: number; visited: number }> {
   const row = (await (await getDb()).get(

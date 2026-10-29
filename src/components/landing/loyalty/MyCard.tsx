@@ -93,6 +93,7 @@ export function MyCard({ credentials, active = true, onMissing }: { credentials:
         </span>
         {card.goal > 0 && left > 0 && <span className="my-card-left">{tf("card_to_go", { count: left })}</span>}
       </div>
+      {card.goal > 0 && venue.loyaltyProgram?.stampRule && <p className="my-card-rule">{venue.loyaltyProgram.stampRule}</p>}
 
       {card.goal > 0 && card.goal <= MAX_DRAWN_STAMPS && (
         <ol className="stamp-dots" aria-label={tf("card_progress", { stamps: stamped, required: card.goal })}>
@@ -108,6 +109,12 @@ export function MyCard({ credentials, active = true, onMissing }: { credentials:
         </ol>
       )}
       {ready && <p className="member-card-ready">{tf("card_reward_ready", { reward: ready.rewardName })}</p>}
+      {card.offers?.welcome && <p className="member-card-ready">{tf("card_welcome_offer", { offer: card.offers.welcome })}</p>}
+      {card.offers && card.offers.ready > 0 && (
+        <p className="member-card-ready">
+          {card.offers.ready === 1 ? tf("card_friend_reward", { reward: card.offers.member }) : tf("card_friend_rewards", { count: card.offers.ready, reward: card.offers.member })}
+        </p>
+      )}
       {card.birthdayTreat && (
         <p className="member-card-ready member-card-birthday">
           <Cake aria-hidden />
@@ -160,9 +167,10 @@ export function MyCard({ credentials, active = true, onMissing }: { credentials:
           venueName={card.venueName}
           labels={{
             title: t("card_invite_title"),
-            body:
-              tf("card_invite_body", { stamps: card.invite.referrerStamps }) +
-              (card.invite.friendStamps > 0 ? ` ${tf("card_invite_friend", { stamps: card.invite.friendStamps })}` : ""),
+            body: card.offers
+              ? tf("card_invite_offer", { member: card.offers.member, friend: card.offers.friend })
+              : tf("card_invite_body", { stamps: card.invite.referrerStamps }) +
+                (card.invite.friendStamps > 0 ? ` ${tf("card_invite_friend", { stamps: card.invite.friendStamps })}` : ""),
             share: t("card_invite_share"),
             copied: t("copied"),
           }}

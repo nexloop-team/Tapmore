@@ -1,5 +1,8 @@
 import type { LoyaltyProgram, RewardTier } from "./types";
 
+/** Starting offers for "Refer a friend" without stamps; the owner rewrites them. */
+export const DEFAULT_REFERRAL_OFFERS = { friend: "10% off", member: "10% off" };
+
 /**
  * The reward ladder of a stamp card, cheapest first. A programme without
  * tiers is a ladder of one: its main reward.

@@ -228,7 +228,7 @@ export function ReviewSettingsForm({ venueId, initial }: { venueId: string; init
     <Card title="Replies" description="How Tapmore answers new reviews. Reviews from before you connected are never answered automatically.">
       <SwitchRow
         title="Reply to 4–5★ reviews automatically"
-        description="An AI reply in your café's name goes on Google straight away. Off: they wait for you, with a reply drafted."
+        description="An AI reply in your business's name goes on Google straight away. Off: they wait for you, with a reply drafted."
         checked={draft.autoReply}
         onChange={(on) => setDraft({ ...draft, autoReply: on })}
       />

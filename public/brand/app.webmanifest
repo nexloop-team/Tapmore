@@ -1,7 +1,7 @@
 {
   "name": "Tapmore",
   "short_name": "Tapmore",
-  "description": "Your venue's menu, loyalty card, Wi-Fi and feedback.",
+  "description": "Your business's menu or price list, loyalty card, feedback and Google reviews.",
   "start_url": "/dashboard",
   "scope": "/dashboard",
   "display": "standalone",

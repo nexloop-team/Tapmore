@@ -6,5 +6,5 @@ import { feedbackSummary } from "@/server/services/feedback-summary";
 export const GET = handle(async (request, ctx: RouteContext<"/api/dashboard/venues/[venueId]/ai/feedback-summary">) => {
   const { venue } = await venueFromRequest(request, (await ctx.params).venueId);
   await rateLimit(request, "feedback-summary", 30);
-  return Response.json(await feedbackSummary({ id: venue.id, name: venue.config.name }), { headers: { "Cache-Control": "no-store" } });
+  return Response.json(await feedbackSummary({ id: venue.id, name: venue.config.name, venueType: venue.config.venueType }), { headers: { "Cache-Control": "no-store" } });
 });

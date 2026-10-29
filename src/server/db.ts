@@ -451,6 +451,27 @@ export function databaseSsl(url: string): false | { rejectUnauthorized: boolean;
   return { rejectUnauthorized: process.env.DATABASE_SSL === "verify" };
 }
 
+/**
+ * Failures before a connection exists (the host's address didn't resolve, it
+ * refused, or the connect timed out): the query was never sent, so trying
+ * once more is safe. A brief network blip then costs a moment, not an error
+ * page. Errors after a query was sent are never retried (a write could run twice).
+ */
+const CONNECT_ERRORS = new Set(["EAI_AGAIN", "ENOTFOUND", "ECONNREFUSED"]);
+function isConnectFailure(error: unknown): boolean {
+  const { code, message } = (error ?? {}) as { code?: string; message?: string };
+  return (!!code && CONNECT_ERRORS.has(code)) || /timeout exceeded when trying to connect/i.test(message ?? "");
+}
+async function retryConnect<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (error) {
+    if (!isConnectFailure(error)) throw error;
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    return await fn();
+  }
+}
+
 async function pgDriver(url: string): Promise<Driver> {
   const pg = (await import("pg")).default;
   const types = { getTypeParser: (oid: number, format?: string) => (PARSERS[oid] ? (PARSERS[oid] as (v: string) => unknown) : pg.types.getTypeParser(oid, format as "text")) };
@@ -482,10 +503,12 @@ async function pgDriver(url: string): Promise<Driver> {
         await client.query(sql);
       },
     );
+  // The pool connects on demand; a connect failure there means the query never left.
+  const pooled = { query: (text: string, values?: unknown[]) => retryConnect(() => pool.query(text, values)) };
   return {
-    db: onClient(pool),
+    db: onClient(pooled),
     async transaction(fn) {
-      const client = await pool.connect();
+      const client = await retryConnect(() => pool.connect());
       try {
         await client.query("BEGIN");
         const result = await fn(onClient(client));

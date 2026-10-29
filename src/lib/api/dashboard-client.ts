@@ -59,6 +59,19 @@ interface SavedVenue {
   config: UpdateVenueRequest["config"];
 }
 
+/** Posts menu photos (plus any extra fields) for the AI to read; reading a long menu can take a minute or two. */
+async function postMenuImport(url: string, files: File[], fields: Record<string, string> = {}): Promise<{ sections: MenuSectionDraft[]; flaggedItemIds: string[] }> {
+  const form = new FormData();
+  for (const file of files) form.append("files", file);
+  for (const [key, value] of Object.entries(fields)) form.append(key, value);
+  const response = await fetch(url, { method: "POST", body: form, signal: AbortSignal.timeout(240_000) }).catch(() => {
+    throw new ApiRequestError(0, "The import didn't finish. Check your connection and try again.");
+  });
+  const data = (await response.json().catch(() => null)) as { sections?: MenuSectionDraft[]; flaggedItemIds?: string[]; error?: string } | null;
+  if (!response.ok || !data?.sections) throw new ApiRequestError(response.status, data?.error ?? "Import failed");
+  return { sections: data.sections, flaggedItemIds: data.flaggedItemIds ?? [] };
+}
+
 export const dashboardApi = {
   signup: (body: SignupRequest) => send<{ ok: true }>("POST", "/api/auth/signup", body),
   /** `home`: where this user's dashboard starts (their last or only venue). */
@@ -109,15 +122,11 @@ export const dashboardApi = {
     send<{ suggestions: { itemId: string; explainer: string }[] }>("POST", `/api/dashboard/venues/${venueId}/ai/explain`, body),
 
   async importMenu(venueId: string, files: File[]): Promise<{ sections: MenuSectionDraft[]; flaggedItemIds: string[] }> {
-    const form = new FormData();
-    for (const file of files) form.append("files", file);
-    // Reading a long menu can take a minute or two.
-    const response = await fetch(`/api/dashboard/venues/${venueId}/ai/menu-import`, { method: "POST", body: form, signal: AbortSignal.timeout(240_000) }).catch(() => {
-      throw new ApiRequestError(0, "The import didn't finish. Check your connection and try again.");
-    });
-    const data = (await response.json().catch(() => null)) as { sections?: MenuSectionDraft[]; flaggedItemIds?: string[]; error?: string } | null;
-    if (!response.ok || !data?.sections) throw new ApiRequestError(response.status, data?.error ?? "Import failed");
-    return { sections: data.sections, flaggedItemIds: data.flaggedItemIds ?? [] };
+    return await postMenuImport(`/api/dashboard/venues/${venueId}/ai/menu-import`, files);
+  },
+  /** The setup wizard's import, before the business exists: its type and currency go with the photos. */
+  async importSetupMenu(files: File[], venueType: string, currencyCode: string): Promise<{ sections: MenuSectionDraft[]; flaggedItemIds: string[] }> {
+    return await postMenuImport("/api/dashboard/setup/menu-import", files, { venueType, currencyCode });
   },
 
   deleteGuest: (venueId: string, customerId: string) => send<{ ok: true }>("DELETE", `/api/dashboard/venues/${venueId}/guests/${encodeURIComponent(customerId)}`),
@@ -132,6 +141,9 @@ export const dashboardApi = {
   staffStamp: (body: StaffStampRequest) => send<StaffCardView>("POST", "/api/staff/stamp", body),
   staffRedeem: (body: StaffRedeemRequest) => send<StaffCardView>("POST", "/api/staff/redeem", body),
   staffUndo: (body: StaffUndoRequest) => send<StaffCardView>("POST", "/api/staff/undo", body),
+  /** Refer a friend: a friend's welcome offer, and the member's reward for a friend who visited (same body as undo). */
+  staffWelcome: (body: StaffUndoRequest) => send<StaffCardView>("POST", "/api/staff/welcome", body),
+  staffFriendReward: (body: StaffUndoRequest) => send<StaffCardView>("POST", "/api/staff/friend-reward", body),
   staffBirthday: (body: StaffBirthdayRequest) => send<StaffCardView>("POST", "/api/staff/birthday", body),
   staffBirthdayDate: (body: StaffBirthdayDateRequest) => send<StaffCardView>("POST", "/api/staff/birthday-date", body),
   staffEnroll: (body: StaffEnrollRequest) => send<StaffEnrollResponse>("POST", "/api/staff/enroll", body),

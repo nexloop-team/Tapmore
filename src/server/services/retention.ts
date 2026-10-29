@@ -14,7 +14,7 @@ import { renderEmail } from "./email-template";
 import { sendMail } from "./mailer";
 
 /** Referral rewards a member can earn in any 30 days, so invites can't be farmed. */
-const MAX_REFERRAL_REWARDS_PER_MONTH = 5;
+export const MAX_REFERRAL_REWARDS_PER_MONTH = 5;
 
 /**
  * Things that follow a staff stamp: the "reward ready" email and referral
@@ -91,6 +91,30 @@ async function rewardReferrer(venue: PublicVenue, friendCardId: string) {
     return { referrerId: referrer.id, before: referrer.stamps, after: next };
   });
   if (result) await sendRewardReadyEmail(venue, result.referrerId, result.before, result.after);
+}
+
+/** Tells the inviter their friend visited and their reward is waiting (refer a friend without stamps). */
+export async function sendFriendRewardEmail(venue: PublicVenue, referrerCardId: string, reward: string): Promise<boolean> {
+  const card = await findCardById(await getDb(), referrerCardId);
+  if (!card) return false;
+  const guest = (await (await getDb()).get("SELECT id, email, first_name FROM customers WHERE id = ?", card.customer_id)) as
+    | { id: string; email: string; first_name: string | null }
+    | undefined;
+  if (!guest) return false;
+  return await sendMail({
+    to: guest.email,
+    subject: `Your friend visited ${venue.name}: ${reward}`,
+    fromName: venue.name,
+    ...renderEmail({
+      brand: venue.name,
+      preheader: "Thanks for the invite. Your reward is waiting.",
+      greeting: `Hi ${guest.first_name || "there"},`,
+      heading: "Your friend came in!",
+      paragraphs: [`A friend you invited just made their first visit to ${venue.name}. Your reward: ${reward}. Show your card at the counter next time you're in.`],
+      button: { label: "Open my card", url: `${appOrigin()}/card/${card.id}?t=${card.access_token}` },
+      footer: [`${venue.name} · via ${BRAND.name}`],
+    }),
+  });
 }
 
 /** Welcome stamps for a friend who joined through an invite, on top of any join bonus. */

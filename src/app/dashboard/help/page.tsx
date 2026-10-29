@@ -12,24 +12,24 @@ export const metadata: Metadata = { title: "Help & contact" };
 
 const FAQ: { q: string; a: string }[] = [
   {
-    q: "Do I need to reprint my QR codes when I change the menu?",
-    a: "No. Every code opens your live page, so menu, Wi-Fi and price changes show up the moment you save. Reprint only if you want codes for new tables.",
+    q: "Do I need to reprint my QR codes when I change my menu or prices?",
+    a: "No. Every code opens your live page, so menu, product, Wi-Fi and price changes show up the moment you save. Reprint only if you want codes for new tables or counters.",
   },
   {
-    q: "A guest's phone won't scan the code. What should I check?",
+    q: "A customer's phone won't scan the code. What should I check?",
     a: "Print at 100% scale (turn off “Fit to page”), keep the code dark on a light background and at least 3 cm wide, and make sure it isn't glossy under a bright light. Most phones scan straight from the camera app.",
   },
   {
-    q: "How do guests join the stamp card?",
+    q: "How do customers join the stamp card?",
     a: "They tap the stamp card on your page and enter their email. The card lives on their phone, so there's nothing to download and nothing to lose.",
   },
   {
     q: "How do my staff add a stamp?",
-    a: "The guest taps “Show to staff” on their card and your team scans it with the till phone or tablet. Add the device, or give each person a login, under Loyalty & capture → Till.",
+    a: "The customer taps “Show to staff” on their card and your team scans it with the till phone or tablet. Add the device, or give each person a login, under Loyalty & capture → Till.",
   },
   {
     q: "What happens when my trial or subscription ends?",
-    a: "Your guest page goes offline until you subscribe. Nothing is deleted: your menu, guests and stamp cards are all there when it comes back.",
+    a: "Your guest page goes offline until you subscribe. Nothing is deleted: your menu, customers and stamp cards are all there when it comes back.",
   },
   {
     q: "Can I change the email I sign in with?",
@@ -50,11 +50,11 @@ export default async function HelpPage({ searchParams }: PageProps<"/dashboard/h
 
   const guides = base
     ? [
-        { href: `${base}/menu`, icon: UtensilsCrossed, title: "Add or update your menu", text: "Type dishes in one line each, or import from a photo." },
-        { href: `${base}/qr`, icon: Printer, title: "Print table QR codes", text: "Cards, stickers and signs, numbered per table." },
+        { href: `${base}/menu`, icon: UtensilsCrossed, title: "Add or update your menu or price list", text: "Type each item in one line, or import from a photo." },
+        { href: `${base}/qr`, icon: Printer, title: "Print QR codes", text: "Cards, stickers and signs, numbered per table or counter." },
         { href: `${base}/loyalty`, icon: Gift, title: "Set up the stamp card", text: "Pick the reward and how many stamps it takes." },
         { href: `${base}/loyalty#till`, icon: Smartphone, title: "Add a till phone", text: "So staff can stamp cards with the camera." },
-        { href: `${base}/design#google`, icon: Star, title: "Link Google reviews", text: "Happy guests get a one-tap way to review you." },
+        { href: `${base}/design#google`, icon: Star, title: "Link Google reviews", text: "Happy customers get a one-tap way to review you." },
         { href: `${base}/billing`, icon: Receipt, title: "Subscription and payments", text: "Your plan, renewal date and payments." },
       ]
     : [];

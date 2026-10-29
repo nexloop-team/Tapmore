@@ -33,6 +33,7 @@ export default async function DashboardLayout({ children }: { children: ReactNod
     unreadFeedback: venue.unreadFeedback,
     awaitingReviews: venue.awaitingReviews,
     logoUrl: venue.logoUrl,
+    venueType: venue.venueType,
   }));
   return (
     <div className={`app ${uiFont.variable}`}>

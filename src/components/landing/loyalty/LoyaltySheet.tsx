@@ -16,14 +16,25 @@ function rewardNoun(value: string) {
   return noun.charAt(0).toLowerCase() + noun.slice(1);
 }
 
-/** One line on how the card works, then the reward ladder when there's more than one reward. */
+/** "10% off" stays, "Free haircut" reads "free haircut" mid-sentence. */
+function lowerFirst(value: string) {
+  return /^[A-Z][a-z]/.test(value) ? value.charAt(0).toLowerCase() + value.slice(1) : value;
+}
+
+/** One line on how the card works (or the refer-a-friend offers), then the reward ladder when there's more than one reward. */
 function RewardsSummary({ program }: { program: LoyaltyProgram }) {
   const { tf } = useLanding();
+  if (program.referralOffers) return <p className="sheet-intro">{tf("loyalty_referral_intro", { friend: lowerFirst(program.referralOffers.friend), member: lowerFirst(program.referralOffers.member) })}</p>;
   const tiers = program.rewardTiers ?? [];
   const top = tiers.length > 0 ? tiers[tiers.length - 1] : { stampsRequired: program.stampsRequired, rewardName: program.rewardName };
   return (
     <>
-      <p className="sheet-intro">{tf("loyalty_join_intro", { stamps: top.stampsRequired, reward: rewardNoun(top.rewardName) })}</p>
+      <p className="sheet-intro">
+        {/^free\s/i.test(top.rewardName)
+          ? tf("loyalty_join_intro", { stamps: top.stampsRequired, reward: rewardNoun(top.rewardName) })
+          : tf("loyalty_join_intro_plain", { stamps: top.stampsRequired, reward: rewardNoun(top.rewardName) })}
+      </p>
+      {program.stampRule && <p className="sheet-intro sheet-rule">{program.stampRule}</p>}
       {tiers.length > 1 && (
         <ul className="tier-ladder">
           {tiers.map((tier, i) => (

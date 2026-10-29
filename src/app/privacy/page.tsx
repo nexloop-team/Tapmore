@@ -32,13 +32,13 @@ export default async function PrivacyPage() {
         It covers the guest pages that venues&apos; QR codes open, the owners&apos; dashboard and the till.
       </p>
       <p>
-        <strong>Two kinds of people use {BRAND.name}:</strong> <a href="#guests">guests</a> who scan a QR code at a café, restaurant or bar,
+        <strong>Two kinds of people use {BRAND.name}:</strong> <a href="#guests">guests</a> (customers) who scan a QR code at a café, shop, salon or other local business,
         and <a href="#owners">venue owners and their staff</a>, who run those pages.
       </p>
 
       <h2 id="guests">Part A: Guests at a venue</h2>
       <p>
-        When you scan a table QR code, the page that opens belongs to that venue. <strong>The venue is the Data Fiduciary</strong>: it decides
+        When you scan a business&apos;s QR code, the page that opens belongs to that business (the &ldquo;venue&rdquo;). <strong>The venue is the Data Fiduciary</strong>: it decides
         what to ask you for and why. {BRAND.name} runs the page for the venue as its <strong>Data Processor</strong>, and uses your data only
         for that venue, never for itself and never for advertising.
       </p>
@@ -74,7 +74,7 @@ export default async function PrivacyPage() {
             </tr>
             <tr>
               <td>Use the page</td>
-              <td>Which buttons are tapped, which table&apos;s QR code was scanned, a random ID for this visit, your network address</td>
+              <td>Which buttons are tapped, which QR code was scanned (for example which table or counter), a random ID for this visit, your network address</td>
               <td>Show the venue how its page is used, and protect the service from abuse (addresses are held in memory briefly, not stored)</td>
             </tr>
           </tbody>

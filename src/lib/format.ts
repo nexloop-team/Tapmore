@@ -56,3 +56,12 @@ export function initials(name: string | null | undefined, fallback = "?"): strin
   const letters = words.length > 1 ? words[0][0] + words[words.length - 1][0] : (words[0]?.[0] ?? fallback);
   return letters.toUpperCase();
 }
+
+/** "4.5", "4,50", "1,25,000" or "12,500.50" → minor units; anything else → null. */
+export function parsePrice(text: string): number | null {
+  const trimmed = text.trim().replace(/^[₹$£€]\s*/, "");
+  // Commas between groups of digits are thousands (Indian 1,25,000 or 12,500); a lone ",50" is a decimal comma.
+  const clean = /^\d{1,3}(,\d{2,3})+(\.\d{0,2})?$/.test(trimmed) ? trimmed.replace(/,/g, "") : trimmed.replace(",", ".");
+  if (!/^\d+(\.\d{0,2})?$/.test(clean)) return null;
+  return Math.round(parseFloat(clean) * 100);
+}

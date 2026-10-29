@@ -9,10 +9,11 @@ import { ThemeStyle } from "@/components/ThemeStyle";
 import { initials } from "@/lib/format";
 import { createTranslator, type Locale, LOCALE } from "@/lib/i18n";
 import { computeTheme } from "@/lib/theme";
-import { hasLoyaltyProgram } from "@/lib/venue/features";
+import { hasLoyaltyProgram, isReferralOnly } from "@/lib/venue/features";
 import { programTiers, stampGoal } from "@/lib/venue/loyalty";
 import { findCardForViewer } from "@/server/repositories/loyalty-cards";
-import { ensureReferralCode } from "@/server/repositories/retention";
+import { getDb } from "@/server/db";
+import { ensureReferralCode, referralOfferState } from "@/server/repositories/retention";
 import { recentEvents, type StampEvent } from "@/server/repositories/stamps";
 import { findPausedVenue, findVenue } from "@/server/repositories/venues";
 import { firstParam, serverOrigin } from "@/server/request";
@@ -51,7 +52,12 @@ function historyLine(event: StampEvent, t: ReturnType<typeof createTranslator>["
     case "feedback":
       return t("rc_ev_feedback");
     case "referral":
-      return tf("rc_ev_referral", { count: event.delta });
+      // Refer a friend without stamps earns an offer, not stamps.
+      return event.delta === 0 ? tf("rc_ev_friend_earned", { reward: event.reward_name ?? "" }) : tf("rc_ev_referral", { count: event.delta });
+    case "referral_redeem":
+      return tf("rc_ev_friend_used", { reward: event.reward_name ?? "" });
+    case "welcome":
+      return tf("rc_ev_welcome", { reward: event.reward_name ?? "" });
     case "birthday":
       return tf("rc_ev_birthday", { reward: event.reward_name ?? "" });
     default:
@@ -107,12 +113,14 @@ async function CardBody({ card, venue, token, locale }: { card: ViewerCard; venu
   // Staff scan this on a paired till device; the device pairing is what authorises the stamp.
   const origin = await serverOrigin();
   const referral = program?.referral?.enabled ? program.referral : null;
+  const offers = isReferralOnly(venue) ? venue.loyaltyProgram!.referralOffers! : null;
   // Independent lookups, side by side.
-  const [staffQr, referralCode, events, birthday] = await Promise.all([
-    program ? qrSvg(`${origin}/staff/stamp?c=${card.id}`) : null,
-    referral ? ensureReferralCode(card.id) : null,
+  const [staffQr, referralCode, events, birthday, offerState] = await Promise.all([
+    program || offers ? qrSvg(`${origin}/staff/stamp?c=${card.id}`) : null,
+    referral || offers ? ensureReferralCode(card.id) : null,
     recentEvents(card.id, 12),
     birthdayTreat(venue, card, card.birthday_month, card.birthday_day),
+    offers ? getDb().then((db) => referralOfferState(db, card.id)) : null,
   ]);
   const inviteUrl = referralCode ? `${origin}/s?i=${encodeURIComponent(venue.shortCode)}&ref=${referralCode}&s=invite` : null;
   const history = events
@@ -138,6 +146,7 @@ async function CardBody({ card, venue, token, locale }: { card: ViewerCard; venu
               ? tf("rc_hi_member", { name: holder })
               : t("card_show_rewards")}
         </p>
+        {program?.stampRule && <p className="rc-rule">{program.stampRule}</p>}
       </header>
 
       <section className="rc-hero" aria-label={venue.name}>
@@ -169,6 +178,12 @@ async function CardBody({ card, venue, token, locale }: { card: ViewerCard; venu
         )}
       </section>
 
+      {offers && offerState?.welcomeOpen && <p className="member-card-ready">{tf("card_welcome_offer", { offer: offers.friend })}</p>}
+      {offers && offerState && offerState.ready > 0 && (
+        <p className="member-card-ready">
+          {offerState.ready === 1 ? tf("card_friend_reward", { reward: offers.member }) : tf("card_friend_rewards", { count: offerState.ready, reward: offers.member })}
+        </p>
+      )}
       {birthday && !birthday.given && (
         <p className="member-card-ready member-card-birthday">
           <Cake aria-hidden />
@@ -206,16 +221,17 @@ async function CardBody({ card, venue, token, locale }: { card: ViewerCard; venu
         </ul>
       )}
 
-      {referral && inviteUrl && (
+      {(referral || offers) && inviteUrl && (
         <InviteFriend
           url={inviteUrl}
           venueName={venue.name}
           labels={{
             title: t("card_invite_title"),
-            body:
-              referral.referrerStamps === 1 && referral.friendStamps === 1
+            body: offers
+              ? tf("card_invite_offer", { member: offers.member, friend: offers.friend })
+              : referral!.referrerStamps === 1 && referral!.friendStamps === 1
                 ? t("rc_invite_both")
-                : tf("card_invite_body", { stamps: referral.referrerStamps }) + (referral.friendStamps > 0 ? ` ${tf("card_invite_friend", { stamps: referral.friendStamps })}` : ""),
+                : tf("card_invite_body", { stamps: referral!.referrerStamps }) + (referral!.friendStamps > 0 ? ` ${tf("card_invite_friend", { stamps: referral!.friendStamps })}` : ""),
             share: t("card_invite_share"),
             copied: t("copied"),
           }}

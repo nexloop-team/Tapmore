@@ -52,6 +52,14 @@ export interface StaffCardView {
   guestEmail: string;
   stamps: number;
   goal: number;
+  /**
+   * "Refer a friend" without stamps: the welcome offer this (invited) guest
+   * can have now, and the rewards they've earned for friends who visited.
+   * Null on a stamp card.
+   */
+  offers: { welcome: string | null; ready: number; member: string } | null;
+  /** How a stamp is earned ("1 stamp for every ₹500 spent"), when the owner has set one. */
+  stampRule: string | null;
   tiers: { index: number; rewardName: string; stampsRequired: number; unlocked: boolean }[];
   /** The last stamp or redemption, if it can still be undone. */
   undoable: { kind: string; delta: number; rewardName: string | null } | null;

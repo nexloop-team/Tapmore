@@ -162,6 +162,8 @@ export interface VenueSummary {
   unreadFeedback: number;
   /** Google review replies waiting for the owner's approval. */
   awaitingReviews: number;
+  /** "cafe", "shop", "salon"…: the sidebar's words follow it (see lib/venue/business). */
+  venueType: string | null;
 }
 
 /**
@@ -171,6 +173,7 @@ export interface VenueSummary {
 export async function listVenueSummariesForUser(userId: string): Promise<VenueSummary[]> {
   const rows = (await (await getDb()).all(
     `SELECT v.id, v.short_code, v.status, (v.config::jsonb)->>'name' AS name, (v.config::jsonb)->'branding'->>'logoUrl' AS logo_url,
+            (v.config::jsonb)->>'venueType' AS venue_type,
             s.venue_id AS sub_venue_id, s.plan AS sub_plan, s.status AS sub_status, s.trial_ends_at AS sub_trial_ends_at, s.current_period_end AS sub_current_period_end,
             (SELECT COUNT(*) FROM feedback f WHERE f.venue_id = v.id AND f.created_at > COALESCE(m.feedback_seen_at, now() + INTERVAL '-14 days')) AS unread,
             (SELECT COUNT(*) FROM google_reviews r WHERE r.venue_id = v.id AND r.state IN ('awaiting', 'failed')) AS awaiting
@@ -182,6 +185,7 @@ export async function listVenueSummariesForUser(userId: string): Promise<VenueSu
   )) as unknown as (Pick<GuestVenueRow, "id" | "short_code" | "status" | "sub_venue_id" | "sub_plan" | "sub_status" | "sub_trial_ends_at" | "sub_current_period_end"> & {
     name: string | null;
     logo_url: string | null;
+    venue_type: string | null;
     unread: number;
     awaiting: number;
   })[];
@@ -194,6 +198,7 @@ export async function listVenueSummariesForUser(userId: string): Promise<VenueSu
     subscription: subscriptionOf(row),
     unreadFeedback: row.unread,
     awaitingReviews: row.awaiting,
+    venueType: row.venue_type,
   }));
 }
 
@@ -351,6 +356,8 @@ export interface AdminVenueRow {
   id: string;
   shortCode: string;
   name: string;
+  /** "cafe", "shop"…, to see which kinds of business sign up. */
+  venueType: string | null;
   status: VenueStatus;
   createdAt: string;
   ownerEmail: string | null;
@@ -369,7 +376,7 @@ export interface AdminVenueRow {
 
 export async function listVenuesForAdmin(limit = 500): Promise<AdminVenueRow[]> {
   const rows = (await (await getDb()).all(
-      `SELECT v.id, v.short_code, (v.config::jsonb->>'name') AS name, v.status, v.created_at,
+      `SELECT v.id, v.short_code, (v.config::jsonb->>'name') AS name, (v.config::jsonb->>'venueType') AS venue_type, v.status, v.created_at,
               (SELECT u.email FROM venue_members m JOIN users u ON u.id = m.user_id WHERE m.venue_id = v.id AND m.role = 'owner' LIMIT 1) AS owner_email,
               s.plan, s.status AS sub_status, s.trial_ends_at, s.current_period_end, s.provider, s.cancel_at_period_end, s.updated_at AS sub_updated_at,
               (SELECT COUNT(*) FROM customers c WHERE c.venue_id = v.id) AS guests,
@@ -383,6 +390,7 @@ export async function listVenuesForAdmin(limit = 500): Promise<AdminVenueRow[]> 
     id: string;
     short_code: string;
     name: string;
+    venue_type: string | null;
     status: VenueStatus;
     created_at: string;
     owner_email: string | null;
@@ -401,6 +409,7 @@ export async function listVenuesForAdmin(limit = 500): Promise<AdminVenueRow[]> 
     id: row.id,
     shortCode: row.short_code,
     name: row.name,
+    venueType: row.venue_type,
     status: row.status,
     createdAt: row.created_at,
     ownerEmail: row.owner_email,

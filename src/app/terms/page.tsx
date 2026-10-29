@@ -32,8 +32,8 @@ export default async function TermsPage() {
 
       <h2>1. The service</h2>
       <p>
-        {BRAND.name} gives cafés, restaurants and bars a guest page that table QR codes open: a menu, Wi-Fi details, a digital loyalty card,
-        a private feedback box and a Google review link, with a dashboard to manage them, a guest list and automatic emails. If you connect your
+        {BRAND.name} gives local businesses (cafés, restaurants, shops, salons, clinics and others) a page that their QR codes open: a menu,
+        product or service list, Wi-Fi details, a digital loyalty card, a private feedback box and a Google review link, with a dashboard to manage them, a guest list and automatic emails. If you connect your
         Google Business Profile, {BRAND.name} reads its reviews and posts the replies you approve or have switched on, in your business&apos;s name;
         you&apos;re responsible for those replies, and can edit or remove them on Google. We may improve or change features; we won&apos;t remove a core feature you pay for during your paid year without telling you first.
       </p>
@@ -74,8 +74,10 @@ export default async function TermsPage() {
       <h2>5. Your content</h2>
       <p>
         You own what you add: menus, photos, text and logos. You give us permission to host and display it on your guest page, only to run
-        the service. You confirm you have the right to use it and that it&apos;s accurate, including prices, allergen and veg / non-veg
-        information, which you are responsible for.
+        the service. You confirm you have the right to use it and that it&apos;s accurate, including prices and menu and product information
+        (including allergens and veg / non-veg marks, where shown), which you are responsible for. You are also responsible for following the
+        rules that apply to your business, such as not charging above MRP on packaged goods and any professional rules on offers and rewards
+        (for example for doctors and pharmacies).
       </p>
 
       <h2>6. Your guests&apos; personal data</h2>

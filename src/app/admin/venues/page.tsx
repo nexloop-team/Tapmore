@@ -6,12 +6,13 @@ import { SegmentBadge } from "@/components/dashboard/admin-blocks";
 import { EmptyState, PageHeader } from "@/components/dashboard/blocks";
 import { VenueAvatar } from "@/components/dashboard/Shell";
 import { formatAgo, formatDate } from "@/lib/format";
+import { BUSINESS_GROUPS, businessProfile } from "@/lib/venue/business";
 import { adminVenues, matches, VENUE_LIMIT, type VenueSegment } from "@/server/admin";
 import { requireAdminPage } from "@/server/dashboard";
 import { firstParam, serverOrigin } from "@/server/request";
 import { guestPageUrl } from "@/server/services/qr";
 
-export const metadata: Metadata = { title: "Venues" };
+export const metadata: Metadata = { title: "Businesses" };
 
 const SEGMENTS: { key: VenueSegment | "all"; label: string }[] = [
   { key: "all", label: "All" },
@@ -27,17 +28,25 @@ export default async function AdminVenuesPage({ searchParams }: PageProps<"/admi
   const query = await searchParams;
   const q = firstParam(query.q).slice(0, 100);
   const segment = SEGMENTS.find((s) => s.key === firstParam(query.segment))?.key ?? "all";
+  // Business type filter: "food", "retail", "service" or one type ("salon").
+  const typeParam = firstParam(query.type);
+  const typeFilter = BUSINESS_GROUPS.some((g) => g.group === typeParam || g.types.some((t) => t === typeParam)) ? typeParam : "";
   const origin = await serverOrigin();
 
   const all = await adminVenues();
-  const searched = all.filter((venue) => matches(q, venue.name, venue.shortCode, venue.ownerEmail, venue.id));
+  const ofType = (venue: (typeof all)[number]) => {
+    if (!typeFilter) return true;
+    const profile = businessProfile(venue.venueType);
+    return profile.group === typeFilter || profile.type === typeFilter;
+  };
+  const searched = all.filter((venue) => ofType(venue) && matches(q, venue.name, venue.shortCode, venue.ownerEmail, venue.id));
   const rows = segment === "all" ? searched : searched.filter((venue) => venue.segment === segment);
   const countFor = (key: string) => (key === "all" ? searched.length : searched.filter((venue) => venue.segment === key).length);
-  const href = (key: string) => `/admin/venues?${new URLSearchParams({ ...(q ? { q } : {}), ...(key !== "all" ? { segment: key } : {}) })}`;
+  const href = (key: string) => `/admin/venues?${new URLSearchParams({ ...(q ? { q } : {}), ...(typeFilter ? { type: typeFilter } : {}), ...(key !== "all" ? { segment: key } : {}) })}`;
 
   return (
     <div className="page">
-      <PageHeader eyebrow="Platform admin" title="Venues" description="Search, open or suspend any venue, extend a trial or give free access." />
+      <PageHeader eyebrow="Platform admin" title="Businesses" description="Search, open or suspend any business, extend a trial or give free access." />
 
       <section className="card card-flush">
         <div className="toolbar">
@@ -50,19 +59,33 @@ export default async function AdminVenuesPage({ searchParams }: PageProps<"/admi
           </nav>
           <form className="search" action="/admin/venues" role="search">
             {segment !== "all" && <input type="hidden" name="segment" value={segment} />}
+            {typeFilter && <input type="hidden" name="type" value={typeFilter} />}
             <Search aria-hidden />
-            <input className="input" type="search" name="q" defaultValue={q} placeholder="Name, code or owner email" aria-label="Search venues" />
+            <input className="input" type="search" name="q" defaultValue={q} placeholder="Name, code or owner email" aria-label="Search businesses" />
           </form>
+        </div>
+        <div className="toolbar">
+          <nav className="filter-tabs" aria-label="Filter by type of business">
+            {[{ key: "", label: "All types" }, ...BUSINESS_GROUPS.map((group) => ({ key: group.group, label: group.label }))].map((option) => (
+              <Link
+                key={option.key || "all"}
+                href={`/admin/venues?${new URLSearchParams({ ...(q ? { q } : {}), ...(segment !== "all" ? { segment } : {}), ...(option.key ? { type: option.key } : {}) })}`}
+                aria-current={option.key === typeFilter ? "true" : undefined}
+              >
+                {option.label}
+              </Link>
+            ))}
+          </nav>
         </div>
 
         {rows.length === 0 ? (
-          <EmptyState icon={Building2} title={q ? "No venues match that search" : "Nothing here yet"}>
+          <EmptyState icon={Building2} title={q || typeFilter ? "No businesses match that search" : "Nothing here yet"}>
             {q ? (
               <>
                 Try a shorter search, or <Link href={segment === "all" ? "/admin/venues" : `/admin/venues?segment=${segment}`}>clear it</Link>.
               </>
             ) : (
-              "Venues in this group will show up here."
+              "Businesses in this group will show up here."
             )}
           </EmptyState>
         ) : (
@@ -70,7 +93,8 @@ export default async function AdminVenuesPage({ searchParams }: PageProps<"/admi
             <table className="table">
               <thead>
                 <tr>
-                  <th scope="col">Venue</th>
+                  <th scope="col">Business</th>
+                  <th scope="col">Type</th>
                   <th scope="col">Owner</th>
                   <th scope="col">Subscription</th>
                   <th scope="col" className="num">
@@ -98,6 +122,7 @@ export default async function AdminVenuesPage({ searchParams }: PageProps<"/admi
                         </span>
                       </Link>
                     </td>
+                    <td className="nowrap">{venue.venueType ? businessProfile(venue.venueType).label : <span className="muted">Not set</span>}</td>
                     <td className="truncate">
                       {venue.ownerEmail ? (
                         <Link className="link-quiet" href={`/admin/accounts?q=${encodeURIComponent(venue.ownerEmail)}`}>
@@ -133,7 +158,7 @@ export default async function AdminVenuesPage({ searchParams }: PageProps<"/admi
           </div>
         )}
         <div className="card-foot">
-          Showing {rows.length.toLocaleString("en-IN")} of {all.length.toLocaleString("en-IN")} venues
+          Showing {rows.length.toLocaleString("en-IN")} of {all.length.toLocaleString("en-IN")} businesses
           {all.length >= VENUE_LIMIT && ` (the ${VENUE_LIMIT} newest)`}
         </div>
       </section>

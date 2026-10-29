@@ -209,7 +209,8 @@ export function computeTheme(branding: VenueBranding): Theme {
   const isLightReal = isLightColor(bg);
   const isLightCards = true;
   const cards = isLightCards ? LIGHT_CARDS : DARK_CARDS;
-  const style = branding.style === "classic" || branding.style === "editorial" || branding.style === "modern" ? branding.style : null;
+  // "editorial" was retired: a page that saved it gets the default face.
+  const style = branding.style === "classic" || branding.style === "modern" ? branding.style : null;
   return {
     vars: {
       "--page-bg": bg,

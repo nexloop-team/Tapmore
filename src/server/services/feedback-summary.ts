@@ -20,7 +20,7 @@ type FeedbackSummaryState =
  * changes (new feedback, or old notes leaving the window), so opening the
  * dashboard doesn't call the AI each time. Never emailed.
  */
-export async function feedbackSummary(venue: { id: string; name: string }): Promise<FeedbackSummaryState> {
+export async function feedbackSummary(venue: { id: string; name: string; venueType?: string | null }): Promise<FeedbackSummaryState> {
   const db = await getDb();
   const rows = await db.all<{ id: string; text: string; sentiment: number; created_at: string }>(
     `SELECT id, text, sentiment, created_at FROM feedback

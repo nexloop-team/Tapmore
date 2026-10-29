@@ -204,6 +204,108 @@ export const DEMO_VENUES: PublicVenue[] = [
     ],
     crm: { enabled: true, wifiCapture: true, feedbackCapture: true, birthdayAsk: false },
   },
+  {
+    // A service business: "Services" with "From" prices, a stamp rule and a booking link.
+    id: "ven_glow",
+    shortCode: "demo-salon",
+    name: "Glow Salon",
+    venueType: "salon",
+    currencyCode: "INR",
+    wifi: { ssid: "Glow-Guest", password: "glowup2026", security: "WPA2" },
+    socialLinks: { instagram: "https://www.instagram.com/" },
+    menus: [
+      {
+        id: "menu_glow",
+        name: "Services",
+        linkLabelToken: "our_services",
+        welcomeText: "Prices include GST. Ask us about bridal packages.",
+        sections: [
+          {
+            id: "sec_glow_hair",
+            name: "Hair",
+            sortOrder: 0,
+            items: [
+              { id: "itm_glow_cut", name: "Haircut and wash", description: "Consultation, wash, cut and blow-dry. About 45 minutes.", priceInPence: 49900, priceMode: "from", isAvailable: true, allergens: [], dietaryTags: [], badges: ["popular"] },
+              { id: "itm_glow_colour", name: "Global hair colour", description: "Ammonia-free colour, price depends on length", priceInPence: 249900, priceMode: "from", isAvailable: true, allergens: [], dietaryTags: [] },
+              { id: "itm_glow_spa", name: "Hair spa", description: "Deep-conditioning treatment and head massage. About 60 minutes.", priceInPence: 129900, isAvailable: true, allergens: [], dietaryTags: [], badges: ["new"], featured: true },
+              { id: "itm_glow_keratin", name: "Keratin smoothening", description: "Frizz-free for up to 4 months. We'll quote after a quick look at your hair.", priceInPence: 0, priceMode: "on_request", isAvailable: true, allergens: [], dietaryTags: [] },
+            ],
+          },
+          {
+            id: "sec_glow_skin",
+            name: "Skin and nails",
+            sortOrder: 1,
+            items: [
+              { id: "itm_glow_facial", name: "Signature facial", description: "Cleanse, exfoliation, massage and mask. About 50 minutes.", priceInPence: 149900, isAvailable: true, allergens: [], dietaryTags: [] },
+              { id: "itm_glow_mani", name: "Classic manicure", description: "Shape, cuticle care and polish", priceInPence: 59900, isAvailable: true, allergens: [], dietaryTags: [] },
+              { id: "itm_glow_pedi", name: "Spa pedicure", description: "Soak, scrub, massage and polish", priceInPence: 79900, isAvailable: false, allergens: [], dietaryTags: [] },
+            ],
+          },
+        ],
+      },
+    ],
+    loyaltyProgram: { rewardName: "Free haircut", stampsRequired: 6, stampRule: "1 stamp per visit" },
+    branding: {
+      logoUrl: "/demo/glow-logo.svg",
+      tagline: "Hair, skin and nails in Baner",
+      layout: "grid",
+      backgroundColorHex: "#F3DFD3",
+      showGoogleReviewButton: true,
+      sudokuEnabled: true,
+    },
+    externalLinks: [{ id: "lnk_glow_book", url: "https://example.com/glow-salon/book", labelToken: "book_now", icon: "calendar" }],
+    crm: { enabled: true, wifiCapture: false, feedbackCapture: true, birthdayAsk: true },
+  },
+  {
+    // A shop: featured "Products" (not full stock), "Out of stock", a spend-based stamp rule, no Wi-Fi or Sudoku.
+    id: "ven_sharma",
+    shortCode: "demo-shop",
+    name: "Sharma General Store",
+    venueType: "shop",
+    currencyCode: "INR",
+    wifi: null,
+    socialLinks: {},
+    menus: [
+      {
+        id: "menu_sharma",
+        name: "Products",
+        linkLabelToken: "view_price_list",
+        welcomeText: "This week's offers and best sellers. Ask at the counter for anything else.",
+        sections: [
+          {
+            id: "sec_sharma_offers",
+            name: "This week's offers",
+            sortOrder: 0,
+            items: [
+              { id: "itm_sharma_rice", name: "Basmati rice, 5 kg", description: "Aged long-grain basmati. MRP ₹899.", priceInPence: 74900, isAvailable: true, allergens: [], dietaryTags: [], badges: ["popular"], featured: true },
+              { id: "itm_sharma_oil", name: "Sunflower oil, 1 L", description: "MRP ₹185", priceInPence: 16500, isAvailable: true, allergens: [], dietaryTags: [] },
+              { id: "itm_sharma_atta", name: "Whole wheat atta, 10 kg", description: "Chakki-fresh. MRP ₹520.", priceInPence: 46900, isAvailable: false, allergens: [], dietaryTags: [] },
+            ],
+          },
+          {
+            id: "sec_sharma_home",
+            name: "Home and kitchen",
+            sortOrder: 1,
+            items: [
+              { id: "itm_sharma_cooker", name: "Pressure cooker, 5 L", description: "Stainless steel, 5-year warranty", priceInPence: 189900, isAvailable: true, allergens: [], dietaryTags: [], badges: ["new"] },
+              { id: "itm_sharma_mixer", name: "Mixer grinder, 750 W", description: "3 jars. Price depends on brand.", priceInPence: 349900, priceMode: "from", isAvailable: true, allergens: [], dietaryTags: [] },
+              { id: "itm_sharma_order", name: "Monthly grocery order", description: "Send us your list on WhatsApp; we'll pack it and call you with the total.", priceInPence: 0, priceMode: "on_request", isAvailable: true, allergens: [], dietaryTags: [] },
+            ],
+          },
+        ],
+      },
+    ],
+    loyaltyProgram: { rewardName: "10% off your next bill", stampsRequired: 8, stampRule: "1 stamp for every ₹500 spent" },
+    branding: {
+      logoUrl: "/demo/sharma-logo.svg",
+      tagline: "Groceries and home essentials since 1998",
+      backgroundColorHex: "#E4E9D3",
+      showGoogleReviewButton: true,
+      sudokuEnabled: false,
+    },
+    externalLinks: [],
+    crm: { enabled: true, wifiCapture: false, feedbackCapture: true, birthdayAsk: false },
+  },
 ];
 
 /** The demos' ids: they're for trying the product, so the admin console and its numbers leave them out. */

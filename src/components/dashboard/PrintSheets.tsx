@@ -1,6 +1,7 @@
 import type { CSSProperties } from "react";
 import { Wifi } from "lucide-react";
 import { initials } from "@/lib/format";
+import { businessProfile } from "@/lib/venue/business";
 import { computeTheme } from "@/lib/theme";
 import { safeImageUrl } from "@/lib/venue/features";
 import { sourceSlug } from "@/lib/qr-source";
@@ -17,9 +18,9 @@ const MAX_CARDS = 100;
 /** What fits on one A4 sheet, per format. */
 export const PRINT_FORMATS = {
   a6: { label: "A6 cards", perPage: 4, hint: "Four to a sheet. Cut along the dashed lines and slot into stands." },
-  tent: { label: "Tent cards", perPage: 2, hint: "Two to a sheet. Cut along the dashed line, fold in the middle and stand on the table." },
+  tent: { label: "Tent cards", perPage: 2, hint: "Two to a sheet. Cut along the dashed line, fold in the middle and stand it on a table or counter." },
   sticker: { label: "Round stickers", perPage: 6, hint: "Six to a sheet. Print on round sticker paper, or cut them out." },
-  wifi: { label: "Wi-Fi signs", perPage: 12, hint: "Small signs for the counter and walls that point guests to the code on their table." },
+  wifi: { label: "Wi-Fi signs", perPage: 12, hint: "Small signs for the counter and walls that point people to your QR code." },
 } as const;
 export type PrintFormat = keyof typeof PRINT_FORMATS;
 
@@ -29,21 +30,21 @@ export function isPrintFormat(value: string): value is PrintFormat {
 
 /** "Menu, Wi-Fi and your stamp card": what the code opens, from what this venue offers. */
 function headline(parts: string[]): string {
-  if (parts.length === 0) return "Everything for your table";
+  if (parts.length === 0) return "Everything in one scan";
   if (parts.length === 1) return parts[0];
   return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
 }
 
-/** "1-12" or "1, 2, Patio" → labelled cards, capped so a typo can't render thousands. */
-export function parseTables(input: string): string[] {
+/** "1-12" or "1, 2, Patio" → labelled cards ("Table 1", or "Counter 1" for a shop), capped so a typo can't render thousands. */
+export function parseTables(input: string, spot = "Table"): string[] {
   const labels: string[] = [];
   for (const part of input.split(",").map((p) => p.trim()).filter(Boolean)) {
     const range = /^(\d{1,4})\s*-\s*(\d{1,4})$/.exec(part);
     if (range) {
       const [from, to] = [Number(range[1]), Number(range[2])].sort((a, b) => a - b);
-      for (let n = from; n <= to && labels.length < MAX_CARDS; n++) labels.push(`Table ${n}`);
+      for (let n = from; n <= to && labels.length < MAX_CARDS; n++) labels.push(`${spot} ${n}`);
     } else if (/^\d{1,4}$/.test(part)) {
-      labels.push(`Table ${part}`);
+      labels.push(`${spot} ${part}`);
     } else {
       labels.push(part.slice(0, 40));
     }
@@ -58,8 +59,19 @@ export interface PrintVenue {
   name: string;
   tagline: string | null;
   branding: VenueBranding;
-  /** "Menu", "Wi-Fi", "your stamp card" or "member rewards", in that order. */
+  /** "Menu" (or "Products", "Services"…), "Wi-Fi", "your stamp card" or "member rewards", in that order. */
   offers: string[];
+  /** Where codes stand, numbered on the cards: "Table" or "Counter". */
+  spot: string;
+  /** A food business: "Scan for the menu"; otherwise "Scan for our products". */
+  food: boolean;
+  /** The page shares a Wi-Fi password, so Wi-Fi signs make sense. */
+  wifi: boolean;
+}
+
+/** The formats this venue can print: Wi-Fi signs only when its page shares the Wi-Fi. */
+export function printFormats(venue: Pick<PrintVenue, "wifi">): PrintFormat[] {
+  return (Object.keys(PRINT_FORMATS) as PrintFormat[]).filter((format) => format !== "wifi" || venue.wifi);
 }
 
 /** How many A4 sheets a format needs for these tables. */
@@ -73,7 +85,7 @@ export function PrintSheets({ venue, labels, color, format }: { venue: PrintVenu
   const logo = safeImageUrl(venue.branding.logoUrl);
   const theme = computeTheme(venue.branding);
   const title = headline(venue.offers);
-  const ring = (venue.offers.length ? venue.offers : ["Menu"])
+  const ring = (venue.offers.length ? venue.offers : [venue.food ? "Menu" : "Offers"])
     .map((o) => o.replace("your ", "").replace("stamp card", "rewards").replace("member rewards", "rewards").toUpperCase())
     .join(" · ");
   // The venue's own colours for the A6 cards, stickers and signs.
@@ -85,7 +97,9 @@ export function PrintSheets({ venue, labels, color, format }: { venue: PrintVenu
   const perPage = PRINT_FORMATS[format].perPage;
   const pages: string[][] = [];
   for (let i = 0; i < items.length; i += perPage) pages.push(items.slice(i, i + perPage));
-  const qr = (label: string) => `/api/dashboard/venues/${venue.id}/qr?${new URLSearchParams({ s: sourceSlug(label), color })}`;
+  // An unlabelled card ("") is one of several identical copies: no spot in its code or on it.
+  const qr = (label: string) => `/api/dashboard/venues/${venue.id}/qr?${new URLSearchParams({ ...(label ? { s: sourceSlug(label) } : {}), color })}`;
+  const chip = (label: string) => (label ? <span className="table-chip">{label}</span> : null);
 
   const logoMark = (className: string) =>
     logo ? (
@@ -101,7 +115,7 @@ export function PrintSheets({ venue, labels, color, format }: { venue: PrintVenu
     <div className="tent-panel">
       <div className="tent-qr">
         {/* eslint-disable-next-line @next/next/no-img-element -- generated on demand, auth-gated */}
-        <img src={qr(label)} alt={`QR code for ${label}`} />
+        <img src={qr(label)} alt={label ? `QR code for ${label}` : "QR code"} />
       </div>
       <div className="tent-text">
         <span className="tent-venue">
@@ -110,7 +124,7 @@ export function PrintSheets({ venue, labels, color, format }: { venue: PrintVenu
         </span>
         <h2>{title}</h2>
         <p>Point your phone camera here. No app needed.</p>
-        <span className="table-chip">{label}</span>
+        {chip(label)}
       </div>
     </div>
   );
@@ -150,10 +164,10 @@ export function PrintSheets({ venue, labels, color, format }: { venue: PrintVenu
                     </svg>
                     <span className="sticker-qr">
                       {/* eslint-disable-next-line @next/next/no-img-element -- generated on demand, auth-gated */}
-                      <img src={qr(label)} alt={`QR code for ${label}`} />
+                      <img src={qr(label)} alt={label ? `QR code for ${label}` : "QR code"} />
                     </span>
                   </div>
-                  <span className="sticker-label">{label}</span>
+                  {label && <span className="sticker-label">{label}</span>}
                 </div>
               );
             if (format === "wifi")
@@ -162,7 +176,7 @@ export function PrintSheets({ venue, labels, color, format }: { venue: PrintVenu
                   <Wifi aria-hidden />
                   <span>
                     <strong>Wi-Fi? Scan the code</strong>
-                    on your table. Password in one tap.
+                    {venue.food ? "on your table" : "near the counter"}. Password in one tap.
                   </span>
                 </div>
               );
@@ -172,13 +186,15 @@ export function PrintSheets({ venue, labels, color, format }: { venue: PrintVenu
                 <span className="a6-name">{venue.name}</span>
                 {venue.tagline && <span className="a6-tagline">{venue.tagline}</span>}
                 <span className="a6-rule" aria-hidden />
-                <h2>Scan for the {title.replace(" and ", " & ").replace(/^Menu/, "menu").replace("your stamp card", "stamp card").replace("Wi-Fi", "Wi‑Fi")}</h2>
+                <h2>
+                  Scan for {venue.food ? "the" : "our"} {title.replace(" and ", " & ").replace(/^[A-Z][a-z]/, (start) => start.toLowerCase()).replace("your stamp card", "stamp card").replace("Wi-Fi", "Wi‑Fi")}
+                </h2>
                 <span className="a6-qr">
                   {/* eslint-disable-next-line @next/next/no-img-element -- generated on demand, auth-gated */}
-                  <img src={qr(label)} alt={`QR code for ${label}`} />
+                  <img src={qr(label)} alt={label ? `QR code for ${label}` : "QR code"} />
                 </span>
                 <span className="a6-foot">
-                  <span className="table-chip">{label}</span>
+                  {chip(label) ?? <span />}
                   <span>No app needed</span>
                 </span>
               </div>
@@ -191,14 +207,21 @@ export function PrintSheets({ venue, labels, color, format }: { venue: PrintVenu
 }
 
 /** The bits of a venue the sheets need, from its saved config. */
-export function printVenue(id: string, config: { name: string; branding: VenueBranding; menus: unknown[]; wifi?: { ssid?: string | null } | null; loyaltyProgram?: { stampsEnabled?: boolean } | null }): PrintVenue {
+export function printVenue(
+  id: string,
+  config: { name: string; venueType?: string | null; branding: VenueBranding; menus: unknown[]; wifi?: { ssid?: string | null } | null; loyaltyProgram?: { stampsEnabled?: boolean } | null },
+): PrintVenue {
+  const profile = businessProfile(config.venueType);
   return {
     id,
     name: config.name,
     tagline: config.branding.tagline ?? null,
     branding: config.branding,
+    spot: profile.spot,
+    food: profile.foodFields,
+    wifi: !!config.wifi?.ssid,
     offers: [
-      ...(config.menus.length > 0 ? ["Menu"] : []),
+      ...(config.menus.length > 0 ? [profile.catalogue] : []),
       ...(config.wifi?.ssid ? ["Wi-Fi"] : []),
       ...(config.loyaltyProgram ? [config.loyaltyProgram.stampsEnabled === false ? "member rewards" : "your stamp card"] : []),
     ],

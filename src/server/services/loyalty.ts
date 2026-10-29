@@ -4,7 +4,7 @@ import type { Db } from "../db";
 import type { z } from "zod";
 import type { EnrollResponse, StampResponse, enrollRequest, stampRequest } from "@/lib/api/contracts";
 import { isValidBirthday } from "@/lib/validation";
-import { birthdayAskOn, hasLoyaltyProgram, isRewardsOnly } from "@/lib/venue/features";
+import { birthdayAskOn, hasLoyaltyProgram, isReferralOnly, isRewardsOnly } from "@/lib/venue/features";
 import { programTiers, stampGoal } from "@/lib/venue/loyalty";
 import type { PublicVenue } from "@/lib/venue/types";
 import { getDb, transaction } from "../db";
@@ -101,11 +101,14 @@ export async function enroll(input: EnrollInput, origin: string): Promise<Enroll
       card = await createCard(db, venue.id, customer.id, stamps);
       if (input.captureSource === "feedback" && stamps > 0) await addFeedbackStampCooldownOnly(db, card.id);
       // Joined through a member's invite: link the cards (the inviter is
-      // rewarded at the friend's first staff stamp) and add welcome stamps.
-      const referrer = input.ref && !rewardsOnly && !isRewardsJoin ? await findReferrerCard(db, venue.id, input.ref) : null;
-      if (referrer && referrer.customer_id !== customer.id && venue.loyaltyProgram?.referral?.enabled) {
+      // rewarded at the friend's first staff stamp, or welcome offer when
+      // there are no stamps) and add welcome stamps.
+      const referralOnly = isReferralOnly(venue);
+      const invitesOn = referralOnly || (!rewardsOnly && !isRewardsJoin && !!venue.loyaltyProgram?.referral?.enabled);
+      const referrer = input.ref && invitesOn ? await findReferrerCard(db, venue.id, input.ref) : null;
+      if (referrer && referrer.customer_id !== customer.id) {
         await attachReferral(db, card.id, referrer.id);
-        const bonus = friendJoinBonus(venue, card.stamps);
+        const bonus = referralOnly ? 0 : friendJoinBonus(venue, card.stamps);
         if (bonus > 0) {
           await setCardStamps(db, card.id, card.stamps + bonus);
           await recordStampEvent(db, { venueId: venue.id, cardId: card.id, kind: "bonus", delta: bonus });

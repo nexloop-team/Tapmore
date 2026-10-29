@@ -77,7 +77,7 @@ describe("tile colours", () => {
   });
 
   it("uses the palette's own shades and ignores an old picked tile colour", () => {
-    const linen = findPalette("coffee-house")!;
+    const linen = findPalette("stone")!;
     const p = tilePalette({ backgroundColorHex: linen.bg, palette: linen.id, tileSource: "custom", tileColorHex: "#4A2545" }, true);
     expect(p["--tile-hero"]).toBe(linen.hero);
     expect(p["--tile-pale"]).toBe(linen.pale);
@@ -91,7 +91,8 @@ describe("tile colours", () => {
   });
 
   it("finds palettes by id and nothing for an unknown one", () => {
-    expect(findPalette("coffee-house")?.bg).toBe("#F5E6CA");
+    expect(findPalette("stone")?.bg).toBe("#E8E4DD");
+    expect(findPalette("coffee-house")).toBeNull();
     expect(findPalette("nope")).toBeNull();
     expect(new Set(PALETTES.map((palette) => palette.id)).size).toBe(PALETTES.length);
   });

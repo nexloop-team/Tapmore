@@ -14,6 +14,7 @@ import {
   buildFeatures,
   customFeatureLabel,
   findExternalLink,
+  isReferralOnly,
   isRewardsOnly,
   menuExternalUrl,
   primaryMenu,
@@ -30,7 +31,7 @@ import { FeedbackTile, LinkTile, LoyaltyTile, MenuTile, ReviewTile, SudokuTile, 
 import { useKnownGuestWifi } from "./wifi/useKnownGuestWifi";
 import { FEEDBACK_TEXTAREA_ID, LandingContext, useLanding, type DialogContent, type LandingSession, type Membership } from "./LandingContext";
 import { FeedbackSheet, LoyaltySheet, MyCard, preloadSheetsWhenIdle, RewardsSheet, SudokuSheet, WifiSheet } from "./lazy-sheets";
-import { SocialLinks } from "./SocialLinks";
+import { SocialCard, socialCards, SocialLinks } from "./SocialLinks";
 import { useGoogleReview } from "./useGoogleReview";
 import { VenueHeader } from "./VenueHeader";
 
@@ -122,14 +123,19 @@ function FeatureList({ features }: { features: FeatureKey[] }) {
 
   // Grid layout: bento tiles in the venue's tile shades, opening bottom sheets.
   const bento = venue.branding.layout === "grid";
-  const sizes = useMemo(() => (bento ? tileSizes(features) : {}), [bento, features]);
+  // The call and social cards (when the owner chose cards) close the grid, sized together with the cards above.
+  const social = useMemo(() => socialCards(venue), [venue]);
+  const sizes = useMemo(() => (bento ? tileSizes([...features, ...social.map((card) => card.key)]) : {}), [bento, features, social]);
   const tile = (feature: string, tone: TileSpec["tone"], content: ReactNode): TileSpec | undefined => (bento ? { tone, size: sizes[feature] ?? "small", content } : undefined);
 
   // The sheets' code arrives after the page; fetch the ones this page shows while the phone is idle.
-  const hasCard = !!storedCard && !isRewardsOnly(venue);
+  // Refer a friend without stamps still has a card (with an invite link and the code staff scan), so it joins like a stamp card.
+  const referralOnly = isReferralOnly(venue);
+  const club = isRewardsOnly(venue) && !referralOnly;
+  const hasCard = !!storedCard && !club;
   useEffect(() => {
     const sheets = features.flatMap((feature) => {
-      if (feature === "loyalty") return [hasCard ? MyCard : isRewardsOnly(venue) ? RewardsSheet : LoyaltySheet];
+      if (feature === "loyalty") return [hasCard ? MyCard : club ? RewardsSheet : LoyaltySheet];
       if (feature === "wifi") return [WifiSheet];
       if (feature === "feedback") return [FeedbackSheet];
       return [];
@@ -137,7 +143,7 @@ function FeatureList({ features }: { features: FeatureKey[] }) {
     // The puzzle is the least likely to be opened, so it comes last.
     if (features.includes("sudoku")) sheets.push(SudokuSheet);
     return preloadSheetsWhenIdle(sheets);
-  }, [features, hasCard, venue]);
+  }, [features, hasCard, club]);
 
   // The hosted menu is the most-tapped card: fetch its code and loading screen ahead, so the tap answers at once.
   const hostedMenu = features.includes("menu") && !sanitiseExternalUrl(menuExternalUrl(venue));
@@ -152,7 +158,7 @@ function FeatureList({ features }: { features: FeatureKey[] }) {
 
         switch (feature) {
           case "loyalty":
-            if (storedCard && !isRewardsOnly(venue)) {
+            if (hasCard) {
               return (
                 <ExpandableCard
                   key={feature}
@@ -170,7 +176,7 @@ function FeatureList({ features }: { features: FeatureKey[] }) {
                 </ExpandableCard>
               );
             }
-            const loyaltyLabel = customFeatureLabel(venue, "loyalty") ?? t(isRewardsOnly(venue) ? "feature_members_club" : "feature_loyalty");
+            const loyaltyLabel = customFeatureLabel(venue, "loyalty") ?? t(referralOnly ? "feature_referral" : club ? "feature_members_club" : "feature_loyalty");
             return (
               <ExpandableCard
                 key={feature}
@@ -179,15 +185,15 @@ function FeatureList({ features }: { features: FeatureKey[] }) {
                 icon={<FilledHeart />}
                 tint={TINT.loyalty}
                 tile={tile(feature, "hero", <LoyaltyTile label={loyaltyLabel} credentials={null} />)}
-                onIntent={isRewardsOnly(venue) ? RewardsSheet.preload : LoyaltySheet.preload}
+                onIntent={club ? RewardsSheet.preload : LoyaltySheet.preload}
                 onToggle={(open) => {
                   if (!open) return;
                   tapped();
-                  if (isRewardsOnly(venue)) track("rewards_join_shown", { context: "home" });
+                  if (club) track("rewards_join_shown", { context: "home" });
                   else track("loyalty_signup_shown");
                 }}
               >
-                {isRewardsOnly(venue) ? <RewardsSheet /> : <LoyaltySheet />}
+                {club ? <RewardsSheet /> : <LoyaltySheet />}
               </ExpandableCard>
             );
 
@@ -338,6 +344,9 @@ function FeatureList({ features }: { features: FeatureKey[] }) {
           }
         }
       })}
+      {social.map((card) => (
+        <SocialCard key={card.key} card={card} size={bento ? (sizes[card.key] ?? "small") : undefined} />
+      ))}
     </div>
   );
 }
@@ -373,7 +382,7 @@ export function LandingApp({ venue: savedVenue, locale, source, feedbackVariant,
     const root = document.documentElement;
     for (const [name, value] of Object.entries(theme.vars)) root.style.setProperty(name, value);
   }, [draft, theme]);
-  const features = useMemo(() => buildFeatures(venue), [venue]);
+  const features = useMemo(() => buildFeatures(venue, { preview: source === "preview" }), [venue, source]);
 
   // Device memory lives in localStorage, which the server can't see.
   const rememberedCustomerId = useSyncExternalStore(subscribeStorage, () => deviceMemory.customerId(venue.id), () => null);

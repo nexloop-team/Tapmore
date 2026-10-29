@@ -22,8 +22,12 @@ export interface LoyaltyProgram {
   stampsRequired: number;
   /** `false` makes this a rewards-only membership: a pass, but no stamps. */
   stampsEnabled?: boolean;
+  /** How a stamp is earned ("1 stamp for every ₹500 spent"), shown on the card and the till. */
+  stampRule?: string | null;
   rewardTiers?: RewardTier[];
   referral?: { enabled: boolean; referrerStamps: number; friendStamps: number };
+  /** "Refer a friend" without stamps (stampsEnabled false): the friend's welcome offer and the inviter's reward. */
+  referralOffers?: { friend: string; member: string };
 }
 
 export interface MenuItem {
@@ -31,6 +35,8 @@ export interface MenuItem {
   name: string;
   description?: string | null;
   priceInPence: number;
+  /** "exact" (default), "from" ("From ₹499") or "on_request" (no price shown). */
+  priceMode?: "exact" | "from" | "on_request" | null;
   isAvailable: boolean;
   allergens: string[];
   dietaryTags: string[];
@@ -65,8 +71,10 @@ export interface Menu {
   primaryColorHex?: string | null;
   /** Print each item's kcal (required in some jurisdictions, optional elsewhere). */
   showCalories?: boolean | null;
-  /** rows with thumbnails ("list", the default), big photo cards, or a printed-menu look. */
+  /** The look; none is the business's default (see lib/venue/menu-looks). */
   layout?: MenuLayout | null;
+  /** Shops and services: an "Ask/Book on WhatsApp" button on each item, for a page shared online (off unless true). */
+  askWhatsapp?: boolean | null;
   sections: MenuSection[];
 }
 
@@ -78,10 +86,13 @@ export interface ExternalLink {
   icon?: string | null;
 }
 
+/** "editorial" is retired (shown as the default face); it stays here so older saves still load. */
 export type LandingStyle = "classic" | "editorial" | "modern";
 
 export interface VenueBranding {
   coverImageUrl?: string | null;
+  /** Up to 5 banner photos that take turns; coverImageUrl mirrors the first. */
+  coverImageUrls?: string[];
   logoUrl?: string | null;
   /** Whitespace-only hides the title; absent falls back to the venue name. */
   titleOverride?: string | null;
@@ -113,13 +124,16 @@ export interface VenueBranding {
   headerStyle?: HeaderStyle | null;
   /** corner shape of cards and buttons. Absent means "rounded". */
   buttonShape?: ButtonShape | null;
+  /** The call button and social profiles as small round icons (absent) or as cards in the page's layout. */
+  socialStyle?: SocialStyle | null;
 }
 
 export type PageLayout = "list" | "grid" | "compact";
 export type HeaderStyle = "cover" | "centered" | "minimal";
 export type ButtonShape = "rounded" | "pill" | "square";
+export type SocialStyle = "icons" | "cards";
 /** "photo" is retired: older saves show as the list. */
-export type MenuLayout = "list" | "photo" | "classic";
+export type MenuLayout = "list" | "photo" | "classic" | "simple";
 
 export interface SocialLinks {
   google?: string | null;
@@ -154,6 +168,10 @@ export interface PublicVenue {
   /** "pub" and "bar" raise the consent age line from 13+ to 18+. */
   venueType?: string | null;
   currencyCode: string;
+  /** Shown as a "Call" button. */
+  phone?: string | null;
+  /** Customers message it about a product or service ("Ask on WhatsApp"). */
+  whatsapp?: string | null;
   wifi?: WifiDetails | null;
   socialLinks: SocialLinks;
   menus: Menu[];

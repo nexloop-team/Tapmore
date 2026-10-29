@@ -32,6 +32,45 @@
   object-fit: cover;
   display: block;
 }
+/* Banner photos taking turns: stacked, the current one faded in. */
+.cover-slide {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  transition: opacity 0.8s ease;
+}
+.cover-slide.on {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cover-slide {
+    transition: none;
+  }
+}
+.cover-dots {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  z-index: 3;
+  display: flex;
+  gap: 5px;
+  transform: translateX(-50%);
+}
+.cover-dots span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.15);
+}
+.cover-dots span.on {
+  background: #ffffff;
+}
+/* On a poster the words sit at the bottom, so the dots go to the top. */
+.poster-cover .cover-dots {
+  top: 10px;
+  bottom: auto;
+}
 
 .header-row {
   display: flex;
@@ -106,12 +145,6 @@
   --fw-display: 600;
   --fw-title: 600;
   --display-tracking: -0.005em;
-}
-[data-style="editorial"] {
-  --font-display: var(--font-editorial), Georgia, serif;
-  --fw-display: 600;
-  --fw-title: 600;
-  --display-tracking: -0.01em;
 }
 [data-style="modern"] {
   --font-display: var(--font-modern), system-ui, sans-serif;
@@ -745,6 +778,20 @@
   width: 22px;
   height: 22px;
 }
+/* The call button is a pill with its word: it's the one people look for. */
+.social-links a.social-call {
+  width: auto;
+  padding: 0 18px 0 14px;
+  gap: 7px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 15px;
+  text-decoration: none;
+}
+.social-links a.social-call svg {
+  width: 19px;
+  height: 19px;
+}
 
 /* ───────────────────────── Error view ───────────────────────── */
 .btn-primary {
@@ -1277,6 +1324,17 @@
   flex: none;
   font-size: 13px;
   color: var(--card-text-secondary, var(--text-secondary));
+}
+/* How a stamp is earned, when the venue has set a rule. */
+.my-card-rule,
+.rc-rule {
+  margin: 2px 0 8px;
+  font-size: 13px;
+  color: var(--card-text-secondary, var(--text-secondary));
+}
+.sheet-intro.sheet-rule {
+  margin-top: -8px;
+  font-size: 13px;
 }
 .stamp-dots {
   list-style: none;
@@ -1962,6 +2020,11 @@ svg.tile-glyph {
   display: block;
 }
 
+/* Room under the last card or the social icons (the safe area alone is 0 on most phones). */
+.landing .page-wrapper {
+  padding-bottom: calc(32px + env(safe-area-inset-bottom, 0px));
+}
+
 /* Social icons as outlined circles under the bento. */
 .landing[data-layout="grid"] .social-links a {
   background: transparent;
@@ -2574,6 +2637,240 @@ svg.tile-glyph {
 .dish-list {
   margin-top: 2px;
   list-style: none;
+}
+
+/* Shops and showrooms: a photo grid, two to a row, like an online shop. */
+.product-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px 12px;
+  margin-top: 12px;
+  list-style: none;
+}
+.product-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.product-open {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.product-open:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 3px;
+  border-radius: 14px;
+}
+.product-photo {
+  display: block;
+  aspect-ratio: 1;
+  margin-bottom: 6px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--text-primary) 7%, transparent);
+}
+.product-photo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.product-photo.placeholder {
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-size: 44px;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--text-primary) 30%, transparent);
+}
+.product-name {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+.product-price {
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.product-card.unavailable .product-photo {
+  opacity: 0.5;
+}
+
+/* Big stores: one compact line per item. */
+.simple-list {
+  margin-top: 6px;
+  list-style: none;
+}
+.simple-item + .simple-item {
+  border-top: 1px solid color-mix(in srgb, var(--text-primary) 9%, transparent);
+}
+.simple-open {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 11px 0;
+  border: 0;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 15px;
+  text-align: start;
+  cursor: pointer;
+}
+.simple-open:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+.simple-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.simple-price {
+  flex: none;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Salons, clinics, gyms: the service and price on one line, what's included under it. */
+.service-list {
+  margin-top: 4px;
+  list-style: none;
+}
+.service-item {
+  padding: 16px 0;
+}
+.service-item + .service-item {
+  border-top: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);
+}
+.service-open {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.service-open:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 2px;
+  border-radius: 10px;
+}
+.service-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.service-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.service-name {
+  min-width: 0;
+  font-family: var(--font-display);
+  font-size: 17px;
+  font-weight: var(--fw-title);
+  letter-spacing: var(--display-tracking);
+  line-height: 1.25;
+}
+.service-price {
+  flex: none;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.service-desc {
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.service-photo {
+  flex: none;
+  width: 64px;
+  height: 64px;
+  border-radius: 12px;
+  object-fit: cover;
+}
+
+/* "Ask on WhatsApp" / "Book on WhatsApp" on a product or service. */
+.ask-wa {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 18px;
+  border-radius: 999px;
+  background: #1f8f4e;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+  text-decoration: none;
+}
+.ask-wa svg {
+  width: 18px;
+  height: 18px;
+}
+.ask-wa:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 2px;
+}
+.ask-wa-small {
+  align-self: flex-start;
+  min-height: 34px;
+  margin-top: 8px;
+  padding: 0 12px;
+  font-size: 13px;
+  background: transparent;
+  color: #1a7a43;
+  border: 1px solid color-mix(in srgb, #1a7a43 45%, transparent);
+}
+.product-card .ask-wa-small {
+  align-self: stretch;
+  gap: 6px;
+  margin-top: 0;
+  padding: 0 8px;
+  white-space: nowrap;
+}
+@media (max-width: 360px) {
+  .product-card .ask-wa-small {
+    gap: 4px;
+    padding: 0 6px;
+    font-size: 11.5px;
+  }
+}
+.ask-wa-small svg {
+  width: 15px;
+  height: 15px;
+}
+.dish-sheet .ask-wa {
+  width: 100%;
+  margin-top: 16px;
 }
 .dish + .dish {
   border-top: 1px solid color-mix(in srgb, var(--text-primary) 11%, transparent);

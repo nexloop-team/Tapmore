@@ -1,9 +1,10 @@
 import "server-only";
-import { hasLoyaltyProgram } from "@/lib/venue/features";
+import { hasLoyaltyProgram, isReferralOnly } from "@/lib/venue/features";
 import { programTiers, stampGoal } from "@/lib/venue/loyalty";
 import type { MemberCardView } from "@/lib/api/contracts";
 import { findCardForViewer } from "../repositories/loyalty-cards";
-import { ensureReferralCode } from "../repositories/retention";
+import { getDb } from "../db";
+import { ensureReferralCode, referralOfferState } from "../repositories/retention";
 import { findVenue } from "../repositories/venues";
 import { qrSvg } from "./qr";
 import { birthdayTreat } from "./birthday";
@@ -31,6 +32,8 @@ export async function memberCardView(cardId: string, token: string, origin: stri
   const tiers = programTiers(program);
   const goal = stampGoal(tiers);
   const referral = program?.referral?.enabled ? program.referral : null;
+  const offers = isReferralOnly(venue) ? venue.loyaltyProgram!.referralOffers! : null;
+  const offerState = offers ? await referralOfferState(await getDb(), card.id) : null;
   return {
     cardId: card.id,
     venueId: venue.id,
@@ -40,14 +43,16 @@ export async function memberCardView(cardId: string, token: string, origin: stri
     stamps: card.stamps,
     goal,
     tiers: tiers.map((tier) => ({ rewardName: tier.rewardName, stampsRequired: tier.stampsRequired, unlocked: card.stamps >= tier.stampsRequired })),
-    staffQrSvg: program ? await qrSvg(`${origin}/staff/stamp?c=${card.id}`) : null,
-    invite: referral
-      ? {
-          url: `${origin}/s?i=${encodeURIComponent(venue.shortCode)}&ref=${await ensureReferralCode(card.id)}&s=invite`,
-          referrerStamps: referral.referrerStamps,
-          friendStamps: referral.friendStamps,
-        }
-      : null,
+    staffQrSvg: program || offers ? await qrSvg(`${origin}/staff/stamp?c=${card.id}`) : null,
+    invite:
+      referral || offers
+        ? {
+            url: `${origin}/s?i=${encodeURIComponent(venue.shortCode)}&ref=${await ensureReferralCode(card.id)}&s=invite`,
+            referrerStamps: referral?.referrerStamps ?? 0,
+            friendStamps: referral?.friendStamps ?? 0,
+          }
+        : null,
+    offers: offers && offerState ? { ...offers, welcome: offerState.welcomeOpen ? offers.friend : null, ready: offerState.ready } : null,
     birthdayTreat: await openBirthdayReward(venue, card),
   };
 }

@@ -116,7 +116,7 @@ export function SignupForm({ next, staffVenue }: { next?: string; staffVenue?: s
   return (
     <form onSubmit={onSubmit}>
       <Input label="Your name" name="name" autoComplete="name" autoFocus placeholder="Priya Sharma" />
-      <Input label="Email" name="email" type="email" autoComplete="email" placeholder="you@yourcafe.in" />
+      <Input label="Email" name="email" type="email" autoComplete="email" placeholder="you@yourbusiness.in" />
       <Input label="Password" name="password" type="password" autoComplete="new-password" minLength={8} hint="At least 8 characters." enterKeyHint="go" />
       <Turnstile onSolved={setVerified} />
       <ErrorNotice error={error} />

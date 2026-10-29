@@ -65,6 +65,13 @@ async function setup() {
 }
 
 describe("staff stamping", () => {
+  it("shows the till the owner's stamp rule", async () => {
+    const { venue, card, device } = await setup();
+    expect((await m.staff.viewCard(device, card.id)).stampRule).toBeNull();
+    await m.admin.updateVenue(venue, { config: { loyaltyProgram: { rewardName: "10% off your next bill", stampsRequired: 8, stampRule: "1 stamp for every ₹500 spent" } } });
+    expect((await m.staff.viewCard(device, card.id)).stampRule).toBe("1 stamp for every ₹500 spent");
+  });
+
   it("stamps, enforces the cooldown unless confirmed, and caps at the top reward", async () => {
     const { card, device } = await setup();
     expect((await m.staff.stampCard(device, card.id, 1, false)).stamps).toBe(1);

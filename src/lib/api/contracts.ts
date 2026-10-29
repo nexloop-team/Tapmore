@@ -145,6 +145,12 @@ export interface MemberCardView {
   /** The code staff scan; null when the venue has no stamp card. */
   staffQrSvg: string | null;
   invite: { url: string; referrerStamps: number; friendStamps: number } | null;
+  /**
+   * "Refer a friend" without stamps: the two offers, this guest's welcome
+   * offer while they haven't had it, and friend rewards waiting to be given.
+   * Null on a stamp card.
+   */
+  offers: { friend: string; member: string; welcome: string | null; ready: number } | null;
   /** The owner's birthday reward, on the member's birthday until staff give it; null otherwise. */
   birthdayTreat: string | null;
 }

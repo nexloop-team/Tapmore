@@ -1,13 +1,15 @@
 "use client";
 
-import { Building2, ChevronsUpDown, CreditCard, Gift, History, LayoutDashboard, LifeBuoy, LogOut, Menu, MessageSquareText, Palette, Plus, QrCode, Settings, Shield, Star, Store, type LucideIcon, UserRound, Users, UtensilsCrossed, X } from "lucide-react";
+import { Building2, ChevronsUpDown, CreditCard, Gift, History, LayoutDashboard, LifeBuoy, LogOut, Menu, MessageSquareText, Palette, Plus, QrCode, Settings, Shield, Star, Store, type LucideIcon, UserRound, Users, X } from "lucide-react";
 import Link from "next/link";
 import { useParams, usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { CATALOGUE_ICONS } from "@/components/catalogue-icon";
 import { BrandMark } from "@/components/icons";
 import { BRAND } from "@/config/brand";
 import { dashboardApi } from "@/lib/api/dashboard-client";
 import { initials } from "@/lib/format";
+import { businessProfile, capitalise } from "@/lib/venue/business";
 import { ConfirmProvider } from "./confirm";
 import { forgetReadInbox, useReadInboxes } from "./FeedbackSeen";
 import { ToastProvider } from "./toast";
@@ -22,6 +24,8 @@ interface ShellVenue {
   /** "Active", "Trial · 3 days left" or "Unpaid", shown under the name in the switcher. */
   planLabel?: string;
   logoUrl: string | null;
+  /** "cafe", "shop"…: "Menu" or "Products" in the sidebar. */
+  venueType?: string | null;
 }
 
 interface ShellUser {
@@ -47,14 +51,16 @@ interface NavGroup {
   items: NavItem[];
 }
 
-function venueNav(base: string, unreadFeedback = 0, reviews: { enabled: boolean; awaiting: number } = { enabled: false, awaiting: 0 }): NavGroup[] {
+function venueNav(base: string, unreadFeedback = 0, reviews: { enabled: boolean; awaiting: number } = { enabled: false, awaiting: 0 }, venueType?: string | null): NavGroup[] {
+  const profile = businessProfile(venueType);
+  const person = capitalise(profile.people).replace(/s$/, "");
   return [
     { items: [{ href: base, label: "Overview", icon: LayoutDashboard, exact: true }] },
     {
-      label: "Guest experience",
+      label: `${person} experience`,
       items: [
-        { href: `${base}/design`, label: "Guest page", icon: Palette },
-        { href: `${base}/menu`, label: "Menu", icon: UtensilsCrossed },
+        { href: `${base}/design`, label: `${person} page`, icon: Palette },
+        { href: `${base}/menu`, label: profile.catalogue, icon: CATALOGUE_ICONS[profile.icon] },
         { href: `${base}/loyalty`, label: "Loyalty & capture", icon: Gift },
         { href: `${base}/qr`, label: "QR codes", icon: QrCode },
       ],
@@ -62,13 +68,13 @@ function venueNav(base: string, unreadFeedback = 0, reviews: { enabled: boolean;
     {
       label: "Insights",
       items: [
-        { href: `${base}/guests`, label: "Guests", icon: Users },
+        { href: `${base}/guests`, label: capitalise(profile.people), icon: Users },
         { href: `${base}/feedback`, label: "Feedback", icon: MessageSquareText, badge: unreadFeedback > 0 ? String(unreadFeedback) : undefined },
         ...(reviews.enabled ? [{ href: `${base}/reviews`, label: "Google reviews", icon: Star, badge: reviews.awaiting > 0 ? String(reviews.awaiting) : undefined }] : []),
       ],
     },
     {
-      label: "Venue",
+      label: "Business",
       items: [
         { href: `${base}/billing`, label: "Subscription", icon: CreditCard },
         { href: `${base}/settings`, label: "Settings", icon: Settings },
@@ -82,7 +88,7 @@ const ADMIN_NAV: NavGroup[] = [
     label: "Platform",
     items: [
       { href: "/admin", label: "Overview", icon: LayoutDashboard, exact: true },
-      { href: "/admin/venues", label: "Venues", icon: Building2 },
+      { href: "/admin/venues", label: "Businesses", icon: Building2 },
       { href: "/admin/accounts", label: "Accounts", icon: Users },
       { href: "/admin/activity", label: "Activity log", icon: History },
     ],
@@ -122,23 +128,23 @@ function VenueSwitcher({ venues, current }: { venues: ShellVenue[]; current: str
   if (venues.length === 0) return null;
   return (
     <div className="venue-switch">
-      <VenueAvatar venue={active} name={active ? undefined : "All venues"} />
+      <VenueAvatar venue={active} name={active ? undefined : "All businesses"} />
       <span className="venue-switch-text" aria-hidden>
-        <strong>{active ? active.name : current ? "Another venue" : "All venues"}</strong>
+        <strong>{active ? active.name : current ? "Another business" : "All businesses"}</strong>
         {active?.planLabel && <span>{active.planLabel}</span>}
       </span>
       <select
-        aria-label="Switch venue"
+        aria-label="Switch business"
         value={active ? active.id : ""}
         onChange={(event) => router.push(event.target.value === "__new" ? "/onboarding" : `/dashboard/${event.target.value}`)}
       >
-        {!active && <option value="">{current ? "Another venue" : "All venues"}</option>}
+        {!active && <option value="">{current ? "Another business" : "All businesses"}</option>}
         {venues.map((venue) => (
           <option key={venue.id} value={venue.id}>
             {venue.name}
           </option>
         ))}
-        <option value="__new">+ Add a venue</option>
+        <option value="__new">+ Add a business</option>
       </select>
       <ChevronsUpDown aria-hidden />
     </div>
@@ -254,13 +260,13 @@ export function AppShell({
     mode === "admin"
       ? ADMIN_NAV.map((group) => ({ ...group, items: group.items.map((item) => (counts?.[item.href] !== undefined ? { ...item, total: counts[item.href] } : item)) }))
       : venueId
-        ? venueNav(`/dashboard/${venueId}`, unreadFor(venueId), { enabled: reviews, awaiting: venues.find((v) => v.id === venueId)?.awaitingReviews ?? 0 })
+        ? venueNav(`/dashboard/${venueId}`, unreadFor(venueId), { enabled: reviews, awaiting: venues.find((v) => v.id === venueId)?.awaitingReviews ?? 0 }, venues.find((v) => v.id === venueId)?.venueType)
         : [
             {
-              label: "Your venues",
+              label: "Your businesses",
               items: [
                 ...venues.map((venue) => ({ href: `/dashboard/${venue.id}`, label: venue.name, venue })),
-                { href: "/onboarding", label: "Add a venue", icon: Plus },
+                { href: "/onboarding", label: "Add a business", icon: Plus },
               ],
             },
           ];
@@ -298,7 +304,7 @@ export function AppShell({
 
         {mode === "venue" && <VenueSwitcher venues={venues} current={venueId} />}
 
-        <nav className="sidebar-body" aria-label={mode === "admin" ? "Platform" : "Venue"}>
+        <nav className="sidebar-body" aria-label={mode === "admin" ? "Platform" : "Business"}>
           {groups.map((group, index) => (
             <div key={group.label ?? index} className="nav-group">
               {group.label && <div className="nav-group-label">{group.label}</div>}
@@ -314,7 +320,7 @@ export function AppShell({
         <div className="sidebar-foot">
           <ul className="nav-list">
             {mode === "admin" ? (
-              ownsVenues && <NavLink item={{ href: "/dashboard", label: "My venues", icon: Store, exact: true }} pathname={pathname} />
+              ownsVenues && <NavLink item={{ href: "/dashboard", label: "My businesses", icon: Store, exact: true }} pathname={pathname} />
             ) : (
               user.isAdmin && <NavLink item={{ href: "/admin", label: "Platform admin", icon: Shield }} pathname={pathname} />
             )}

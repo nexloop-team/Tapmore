@@ -80,11 +80,11 @@ export default async function ReviewsPage({ params, searchParams }: PageProps<"/
           <h2>Answer every Google review from here</h2>
           <ul>
             <li>New reviews arrive within minutes of being posted.</li>
-            <li>4–5★: a reply in your café&apos;s name goes on Google automatically. You can switch this off.</li>
+            <li>4–5★: a reply in your business&apos;s name goes on Google automatically. You can switch this off.</li>
             <li>1–3★: a reply is drafted and waits for you to check it. You can have these posted automatically too.</li>
             <li>Reviews from before you connect are never answered automatically.</li>
           </ul>
-          <p className="hint">Sign in with the Google account that owns or manages your café&apos;s Google Business Profile. You can disconnect any time.</p>
+          <p className="hint">Sign in with the Google account that owns or manages your business&apos;s Google Business Profile. You can disconnect any time.</p>
           <ConnectButton venueId={venue.id} />
         </section>
       </>
@@ -123,7 +123,7 @@ export default async function ReviewsPage({ params, searchParams }: PageProps<"/
         ) : (
           <section className="card review-connect">
             <h2>No Business Profile on that Google account</h2>
-            <p>{problem ?? "The Google account you connected doesn't own or manage a Google Business Profile. Connect the account that manages your café's profile."}</p>
+            <p>{problem ?? "The Google account you connected doesn't own or manage a Google Business Profile. Connect the account that manages your business's profile."}</p>
             <ConnectButton venueId={venue.id} label="Connect a different account" />
           </section>
         )}
@@ -170,7 +170,7 @@ export default async function ReviewsPage({ params, searchParams }: PageProps<"/
       {rows.length === 0 ? (
         <div className="card empty">
           <Star aria-hidden />
-          <p>{filter === "awaiting" ? "Nothing waiting for a reply." : filter === "replied" ? "No replies yet." : "No Google reviews yet. They show up here as soon as guests post them."}</p>
+          <p>{filter === "awaiting" ? "Nothing waiting for a reply." : filter === "replied" ? "No replies yet." : "No Google reviews yet. They show up here as soon as people post them."}</p>
         </div>
       ) : (
         <ul className="review-list">

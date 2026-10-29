@@ -5,9 +5,12 @@ import { useMemo, useRef, useState, type FormEvent } from "react";
 import { VegMark } from "@/components/menu/VegMark";
 import { useLivePreview } from "@/lib/live-preview";
 import { dashboardApi, errorMessage } from "@/lib/api/dashboard-client";
+import { businessProfile, type BusinessProfile } from "@/lib/venue/business";
+import { MENU_LOOKS } from "@/lib/venue/menu-looks";
 import { isIndianMenu, menuPriceFormat } from "@/lib/venue/region";
 import { ALLERGENS, DIETARY_TAGS, FOOD_TYPES, LINK_LABEL_TOKENS, MENU_BADGES } from "@/lib/venue/constants";
 import type { VenueConfig } from "@/lib/venue/schema";
+import { parsePrice } from "@/lib/format";
 import { useConfirm } from "./confirm";
 import { PreviewPane } from "./EditorFrame";
 import { MenuAiTools } from "./MenuAiTools";
@@ -22,6 +25,8 @@ type Item = Section["items"][number];
 type FoodType = (typeof FOOD_TYPES)[number];
 
 const BADGE_LABELS: Record<(typeof MENU_BADGES)[number], string> = { popular: "Popular", new: "New", spicy: "Spicy", chef: "Chef's pick" };
+/** Tags only a food business uses; a shop or salon keeps Popular and New. */
+const FOOD_BADGES = new Set<(typeof MENU_BADGES)[number]>(["spicy", "chef"]);
 const DIETARY_LABELS: Record<(typeof DIETARY_TAGS)[number], string> = { vegan: "Vegan", vegetarian: "Vegetarian", gluten_free: "Gluten-free" };
 const FOOD_TYPE_LABELS: Record<FoodType, string> = { veg: "Veg", nonveg: "Non-veg", egg: "Egg" };
 const BUTTON_LABELS: Record<(typeof LINK_LABEL_TOKENS)[number], string> = {
@@ -45,19 +50,23 @@ function capitalise(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1);
 }
 
-/** "4.5" or "4,50" → 450; anything else → null. */
-function parsePrice(text: string): number | null {
-  const clean = text.trim().replace(",", ".");
-  if (!/^\d+(\.\d{0,2})?$/.test(clean)) return null;
-  return Math.round(parseFloat(clean) * 100);
+/** What the price column shows: "₹499", "From ₹499" or "On request". */
+function priceLabel(item: Item, money: Intl.NumberFormat): string {
+  if (item.priceMode === "on_request") return "On request";
+  const price = money.format(item.priceInPence / 100);
+  return item.priceMode === "from" ? `From ${price}` : price;
 }
 
 /** What the editor needs to know about the venue's menu conventions. */
 interface Conventions {
   money: Intl.NumberFormat;
   symbol: string;
-  /** Indian menus: the veg mark and "Bestseller" instead of allergens and dietary tags. */
+  /** Indian food menus: the veg mark and "Bestseller" instead of allergens and dietary tags. */
   indian: boolean;
+  /** Food businesses: allergens, dietary tags, calories, spicy / chef's pick and "What's this?". */
+  food: boolean;
+  /** The business's words: "dish" or "product", "Menu" or "Products"… (lib/venue/business). */
+  words: BusinessProfile;
 }
 
 /**
@@ -70,11 +79,17 @@ export function MenuEditor({
   venueId,
   menus,
   currencyCode,
+  venueType,
+  whatsapp,
   ai,
   importLimits,
   previewUrl,
 }: {
   venueId: string;
+  /** "cafe", "shop"…: food fields and words follow it. */
+  venueType?: string | null;
+  /** The business's WhatsApp number, set on the Customer page; products and services can be asked about there. */
+  whatsapp?: string | null;
   /** The hosted menu as guests see it, in preview mode. */
   previewUrl: string;
   menus: VenueConfig["menus"];
@@ -95,8 +110,16 @@ export function MenuEditor({
   const menu = list[Math.min(selected, list.length - 1)];
   const conventions = useMemo<Conventions>(() => {
     const money = menuPriceFormat(undefined, currencyCode);
-    return { money, symbol: money.formatToParts(0).find((part) => part.type === "currency")?.value ?? "", indian: isIndianMenu(currencyCode) };
-  }, [currencyCode]);
+    const words = businessProfile(venueType);
+    return {
+      money,
+      symbol: money.formatToParts(0).find((part) => part.type === "currency")?.value ?? "",
+      indian: words.foodFields && isIndianMenu(currencyCode),
+      food: words.foodFields,
+      words,
+    };
+  }, [currencyCode, venueType]);
+  const { item: one, items: many, catalogue } = conventions.words;
   const external = menu ? menu.externalUrl !== null && menu.externalUrl !== undefined : false;
   const dishCount = menu?.sections.reduce((n, s) => n + s.items.length, 0) ?? 0;
 
@@ -109,13 +132,13 @@ export function MenuEditor({
   const setSections = (sections: Section[]) => setMenu({ sections: sections.map((s, i) => ({ ...s, sortOrder: i })) });
 
   function addMenu() {
-    setMenus([...list, { id: newClientId("menu"), name: `Menu ${list.length + 1}`, sections: [] }]);
+    setMenus([...list, { id: newClientId("menu"), name: `${catalogue} ${list.length + 1}`, sections: [] }]);
     setSelected(list.length);
   }
 
   async function removeMenu() {
     if (!menu) return;
-    if (!(await ask({ title: `Delete “${menu.name}”?`, body: "Every section and dish on this menu goes too. Nothing is saved until you press Save changes.", confirmLabel: "Delete menu", danger: true }))) return;
+    if (!(await ask({ title: `Delete “${menu.name}”?`, body: `Every section and ${one} on it goes too. Nothing is saved until you press Save changes.`, confirmLabel: "Delete menu", danger: true }))) return;
     setMenus(list.filter((m) => m !== menu));
     setSelected(0);
   }
@@ -147,8 +170,12 @@ export function MenuEditor({
         ) : (
           <div className="editor-flow">
             <Card
-              title={menu.name || "Menu"}
-              description={external ? "Guests who tap the menu card go straight to your own menu page." : `${dishCount} dish${dishCount === 1 ? "" : "es"} in ${menu.sections.length} section${menu.sections.length === 1 ? "" : "s"}.`}
+              title={menu.name || catalogue}
+              description={
+                external
+                  ? `${capitalise(conventions.words.people)} who tap the card go straight to your own page.`
+                  : `${dishCount} ${dishCount === 1 ? one : many} in ${menu.sections.length} section${menu.sections.length === 1 ? "" : "s"}.`
+              }
               actions={
                 list.length > 1 ? (
                   <button type="button" className="btn btn-sm btn-danger" onClick={removeMenu}>
@@ -158,26 +185,29 @@ export function MenuEditor({
               }
             >
               <div className="row">
-                <TextField label="Menu name" value={menu.name} onChange={(value) => setMenu({ name: value ?? "" })} placeholder="All day" maxLength={80} />
+                <TextField label="Name" value={menu.name} onChange={(value) => setMenu({ name: value ?? "" })} placeholder={conventions.food ? "All day" : catalogue} maxLength={80} />
                 {!external && (
                   <div className="field">
                     <span className="field-label" id="menu-look-label">
                       Look
                     </span>
+                    {/* Looks made for what the business sells: the first is the default (lib/venue/menu-looks). */}
                     <div className="segmented" role="group" aria-labelledby="menu-look-label">
-                      <button type="button" aria-pressed={menu.layout !== "classic"} onClick={() => setMenu({ layout: null })}>
-                        Cards with photos
-                      </button>
-                      <button type="button" aria-pressed={menu.layout === "classic"} onClick={() => setMenu({ layout: "classic" })}>
-                        Classic printed
-                      </button>
+                      {MENU_LOOKS[conventions.words.group].map((option, index) => {
+                        const chosen = MENU_LOOKS[conventions.words.group].some((other) => other.layout === menu.layout) ? menu.layout === option.layout : index === 0;
+                        return (
+                          <button key={option.label} type="button" aria-pressed={chosen} onClick={() => setMenu({ layout: option.layout })}>
+                            {option.label}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
               </div>
               {external ? (
                 <div className="row" style={{ marginTop: 14 }}>
-                  <TextField label="Menu link" value={menu.externalUrl} onChange={(value) => setMenu({ externalUrl: value ?? "" })} placeholder="https://" type="url" />
+                  <TextField label="Link" value={menu.externalUrl} onChange={(value) => setMenu({ externalUrl: value ?? "" })} placeholder="https://" type="url" />
                   <Field label="Button text" htmlFor="menu-label">
                     <select id="menu-label" className="select" value={menu.linkLabelToken ?? "view_menu"} onChange={(event) => setMenu({ linkLabelToken: event.target.value as Menu["linkLabelToken"] })}>
                       {LINK_LABEL_TOKENS.map((token) => (
@@ -190,8 +220,29 @@ export function MenuEditor({
                 </div>
               ) : (
                 <>
-                  <TextField label="Welcome note (optional)" value={menu.welcomeText} onChange={(value) => setMenu({ welcomeText: value })} placeholder="Food served 12 – 9pm" maxLength={200} />
-                  <SwitchRow title="Show calories" description="Print each dish's kcal where you've entered it." checked={!!menu.showCalories} onChange={(on) => setMenu({ showCalories: on })} />
+                  <TextField
+                    label="Welcome note (optional)"
+                    value={menu.welcomeText}
+                    onChange={(value) => setMenu({ welcomeText: value })}
+                    placeholder={conventions.food ? "Food served 12 – 9pm" : "Prices include GST. Ask us about offers."}
+                    maxLength={200}
+                  />
+                  {conventions.food && (
+                    <SwitchRow title="Show calories" description="Print each dish's kcal where you've entered it." checked={!!menu.showCalories} onChange={(on) => setMenu({ showCalories: on })} />
+                  )}
+                  {!conventions.food && (
+                    <SwitchRow
+                      title={conventions.words.group === "service" ? "“Book on WhatsApp” buttons" : "“Ask on WhatsApp” buttons"}
+                      description={
+                        whatsapp
+                          ? `For when you share your page online (Instagram, Google): people at home can message you about a ${one}, already named in the message. ${capitalise(conventions.words.people)} in your ${conventions.words.noun} can just ask you, so it's off by default.`
+                          : `For when you share your page online. Add your WhatsApp number on the Customer page (Contact and social) to turn these on.`
+                      }
+                      checked={!!whatsapp && menu.askWhatsapp === true}
+                      disabled={!whatsapp}
+                      onChange={(on) => setMenu({ askWhatsapp: on })}
+                    />
+                  )}
                 </>
               )}
               <button
@@ -199,7 +250,7 @@ export function MenuEditor({
                 className="btn btn-sm btn-ghost menu-mode-switch"
                 onClick={() => setMenu(external ? { externalUrl: null } : { externalUrl: menu.externalUrl ?? "", linkLabelToken: menu.linkLabelToken ?? "view_menu" })}
               >
-                {external ? "Add the dishes here instead" : "My menu is on another website"}
+                {external ? `Add the ${many} here instead` : `My ${catalogue.toLowerCase()} ${conventions.food ? "is" : "are"} on another website`}
               </button>
             </Card>
 
@@ -215,6 +266,7 @@ export function MenuEditor({
                       )}
                       <MenuAiTools
                         venueId={venueId}
+                        words={conventions.words}
                         importLimits={importLimits}
                         sections={menu.sections}
                         onImport={(sections, mode, flagged) => {
@@ -234,7 +286,7 @@ export function MenuEditor({
                     </div>
                   ) : (
                     <button type="button" className="btn menu-import-open" onClick={() => setImporting(true)}>
-                      <Sparkles aria-hidden /> Add dishes from a photo of your menu
+                      <Sparkles aria-hidden /> Add {many} from a photo of your {catalogue.toLowerCase()}
                     </button>
                   ))}
 
@@ -263,7 +315,7 @@ export function MenuEditor({
                     section.items.length === 0 ||
                     (await ask({
                       title: `Delete “${section.name || "this section"}”?`,
-                      body: `Its ${section.items.length} dish${section.items.length === 1 ? "" : "es"} go too.`,
+                      body: `Its ${section.items.length} ${section.items.length === 1 ? one : many} go too.`,
                       confirmLabel: "Delete section",
                       danger: true,
                     }))
@@ -276,14 +328,14 @@ export function MenuEditor({
       </div>
 
       {external || !menu ? (
-        <aside className="preview-pane" aria-label="Menu preview">
+        <aside className="preview-pane" aria-label="Preview">
           <span className="preview-label">Live preview</span>
           <div className="preview-empty">
-            <p>{menu ? "This menu opens your own link, so there's nothing to preview here." : "Your menu shows here once you add one."}</p>
+            <p>{menu ? "This opens your own link, so there's nothing to preview here." : `Your ${catalogue.toLowerCase()} shows here once you add one.`}</p>
           </div>
         </aside>
       ) : (
-        <PreviewPane src={`${previewUrl}&embed=1`} title="Live menu preview" fullHref={previewUrl} />
+        <PreviewPane src={`${previewUrl}&embed=1`} title="Live preview" fullHref={previewUrl} />
       )}
 
       <SaveBar dirty={editor.dirty} saving={editor.saving} error={editor.error} onSave={editor.save} onReset={editor.reset} />
@@ -291,14 +343,14 @@ export function MenuEditor({
   );
 }
 
-/** One line under a dish's name: what a guest will see on it, or what still needs doing. */
-function itemNote(item: Item, flagged: boolean, indian: boolean): { text: string; warn: boolean } {
+/** One line under an item's name: what a customer will see on it, or what still needs doing. */
+function itemNote(item: Item, flagged: boolean, { indian, food }: Conventions): { text: string; warn: boolean } {
   if (flagged) return { text: "Imported · check allergens", warn: true };
-  if (!item.priceInPence) return { text: "No price yet", warn: true };
+  if (!item.priceInPence && item.priceMode !== "on_request") return { text: "No price yet", warn: true };
   if (indian && !item.foodType) return { text: "Mark it veg or non-veg", warn: true };
   const parts = [
-    ...(item.badges ?? []).map((badge) => (indian && badge === "popular" ? "Bestseller" : BADGE_LABELS[badge])),
-    ...(indian ? [] : item.dietaryTags.map((tag) => DIETARY_LABELS[tag])),
+    ...(item.badges ?? []).filter((badge) => food || !FOOD_BADGES.has(badge)).map((badge) => (indian && badge === "popular" ? "Bestseller" : BADGE_LABELS[badge])),
+    ...(indian || !food ? [] : item.dietaryTags.map((tag) => DIETARY_LABELS[tag])),
     ...(item.featured ? ["Today's special"] : []),
   ];
   return { text: parts.join(" · ") || item.description || "Tap to add a photo, description or tags", warn: false };
@@ -316,7 +368,7 @@ interface SectionsProps {
   onRemoveSection: (section: Section) => Promise<boolean>;
 }
 
-/** Every section stacked, as guests see the menu; a dish opens in place to edit, one at a time. */
+/** Every section stacked, as customers see it; an item opens in place to edit, one at a time. */
 function MenuSections({ sections, onChange, onRemoveSection, ...rest }: SectionsProps) {
   const [openItem, setOpenItem] = useState<string | null>(null);
 
@@ -343,7 +395,7 @@ function MenuSections({ sections, onChange, onRemoveSection, ...rest }: Sections
         />
       ))}
       <button type="button" className="btn-dashed" disabled={sections.length >= 50} onClick={addSection}>
-        <Plus aria-hidden /> {sections.length === 0 ? "Add your first section, like Starters or Coffee" : "Add a section"}
+        <Plus aria-hidden /> {sections.length === 0 ? `Add your first section, like ${rest.conventions.words.sectionPlaceholder}` : "Add a section"}
       </button>
     </>
   );
@@ -373,7 +425,7 @@ function SectionCard({
   onMove: (delta: number) => void;
   onRemove: () => void;
 }) {
-  const { money, indian } = conventions;
+  const { money, indian, words } = conventions;
   const setItems = (items: Item[]) => onChange({ ...section, items });
   const setItem = (id: string, patch: Partial<Item>) => setItems(section.items.map((i) => (i.id === id ? { ...i, ...patch } : i)));
   const drag = useDragReorder(section.items.length, (from, to) => setItems(moveTo(section.items, from, to)));
@@ -381,7 +433,7 @@ function SectionCard({
   return (
     <section className="card menu-section-card" aria-label={section.name || "New section"}>
       <div className="pane-head">
-        <input className="input pane-title" aria-label="Section name" placeholder="Section name, e.g. Starters" value={section.name} maxLength={120} onChange={(event) => onChange({ ...section, name: event.target.value })} />
+        <input className="input pane-title" aria-label="Section name" placeholder={`Section name, e.g. ${words.sectionPlaceholder.split(" or ")[0]}`} value={section.name} maxLength={120} onChange={(event) => onChange({ ...section, name: event.target.value })} />
         <button type="button" className="btn btn-icon btn-ghost" aria-label="Move section up" disabled={first} onClick={() => onMove(-1)}>
           <ArrowUp aria-hidden />
         </button>
@@ -395,7 +447,7 @@ function SectionCard({
       <input
         className="input pane-desc"
         aria-label="Section note"
-        placeholder="Optional note, e.g. Served until 11:30"
+        placeholder={words.foodFields ? "Optional note, e.g. Served until 11:30" : "Optional note, e.g. New stock every Monday"}
         value={section.description ?? ""}
         maxLength={140}
         onChange={(event) => onChange({ ...section, description: event.target.value || null })}
@@ -403,11 +455,11 @@ function SectionCard({
       {section.items.length > 0 && (
         <ul className="pane-list">
           {section.items.map((it, index) => {
-            const note = itemNote(it, toCheck.has(it.id), indian);
+            const note = itemNote(it, toCheck.has(it.id), conventions);
             const open = openItem === it.id;
             return (
               <li key={it.id} ref={drag.rowRef(index)} className={`item-row${open ? " selected" : ""}${it.isAvailable ? "" : " sold-out"}${drag.dragging === index ? " dragging" : ""}`}>
-                <button type="button" className="drag-handle" aria-label={`Reorder ${it.name || "this dish"}. Use the arrow keys to move it.`} {...drag.handleProps(index)}>
+                <button type="button" className="drag-handle" aria-label={`Reorder ${it.name || `this ${words.item}`}. Use the arrow keys to move it.`} {...drag.handleProps(index)}>
                   <GripVertical aria-hidden />
                 </button>
                 <button type="button" className="item-row-main" aria-expanded={open} onClick={() => onOpen(open ? null : it.id)}>
@@ -416,16 +468,16 @@ function SectionCard({
                   <span className="item-row-text">
                     <strong>
                       {indian && it.foodType && <VegMark type={it.foodType} label={FOOD_TYPE_LABELS[it.foodType]} />}
-                      {it.name || "Untitled dish"}
+                      {it.name || `Untitled ${words.item}`}
                     </strong>
                     <span className={note.warn ? "warn" : undefined}>{note.text}</span>
                   </span>
-                  <span className="num item-row-price">{money.format(it.priceInPence / 100)}</span>
+                  <span className="num item-row-price">{priceLabel(it, money)}</span>
                   <ChevronDown className="item-row-chevron" aria-hidden />
                 </button>
                 <span className="item-row-stock">
-                  <span aria-hidden>{it.isAvailable ? "In stock" : "Sold out"}</span>
-                  <Switch label={`${it.name || "This dish"} in stock`} checked={it.isAvailable} onChange={(on) => setItem(it.id, { isAvailable: on })} />
+                  <span aria-hidden>{it.isAvailable ? "In stock" : words.group === "food" ? "Sold out" : "Unavailable"}</span>
+                  <Switch label={`${it.name || `This ${words.item}`} in stock`} checked={it.isAvailable} onChange={(on) => setItem(it.id, { isAvailable: on })} />
                 </span>
                 {open && (
                   <ItemEditor
@@ -453,9 +505,9 @@ function SectionCard({
   );
 }
 
-/** One line to add a dish: name, price (and veg or non-veg), Enter. Details can come later. */
+/** One line to add an item: name, price (and veg or non-veg), Enter. Details can come later. */
 function QuickAdd({ conventions, onAdd }: { conventions: Conventions; onAdd: (item: Item) => void }) {
-  const { symbol, indian } = conventions;
+  const { symbol, indian, words } = conventions;
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
   const [foodType, setFoodType] = useState<FoodType>("veg");
@@ -473,7 +525,7 @@ function QuickAdd({ conventions, onAdd }: { conventions: Conventions; onAdd: (it
 
   return (
     <form className="quick-add" onSubmit={submit}>
-      <input ref={nameInput} className="input" aria-label="New dish name" placeholder={indian ? "Add a dish, e.g. Masala dosa" : "Add a dish, e.g. Flat white"} value={name} maxLength={120} onChange={(event) => setName(event.target.value)} />
+      <input ref={nameInput} className="input" aria-label={`New ${words.item} name`} placeholder={`Add a${/^[aeiou]/.test(words.item) ? "n" : ""} ${words.item}, e.g. ${indian || !words.foodFields ? words.itemPlaceholder : "Flat white"}`} value={name} maxLength={120} onChange={(event) => setName(event.target.value)} />
       <span className="input-prefix quick-add-price">
         {symbol && <span aria-hidden>{symbol}</span>}
         <input className="input" aria-label="Price" inputMode="decimal" placeholder="0" value={price} onChange={(event) => setPrice(event.target.value)} aria-invalid={pence === null} />
@@ -517,19 +569,20 @@ function ItemEditor({
   onRemove: () => void;
   onClose: () => void;
 }) {
-  const { symbol, indian } = conventions;
+  const { symbol, indian, food, words } = conventions;
   // Typed text, so "4." or "" survive while the owner is mid-edit.
   const [price, setPrice] = useState(item.priceInPence ? String(item.priceInPence / 100) : "");
+  const onRequest = item.priceMode === "on_request";
   const [drafting, setDrafting] = useState(false);
   const [draftError, setDraftError] = useState<string | null>(null);
   const [aiDrafted, setAiDrafted] = useState(false);
   // The rarely used settings stay folded unless the dish already uses one.
-  const [more, setMore] = useState(flagged || !!item.calories || !!item.featured || !!item.explainer || (!indian && item.allergens.length > 0));
+  const [more, setMore] = useState(flagged || !!item.featured || (food && (!!item.calories || !!item.explainer || (!indian && item.allergens.length > 0))));
   const set = (patch: Partial<Item>) => onChange({ ...item, ...patch });
   const toggle = <T extends string>(list: T[], value: T) => (list.includes(value) ? list.filter((v) => v !== value) : [...list, value]);
 
   return (
-    <div className="item-editor" role="group" aria-label={`Edit ${item.name || "new dish"}`}>
+    <div className="item-editor" role="group" aria-label={`Edit ${item.name || `new ${words.item}`}`}>
       {flagged && (
         <div className="ai-check">
           <span>
@@ -550,17 +603,44 @@ function ItemEditor({
               id={`price-${item.id}`}
               className="input"
               inputMode="decimal"
-              placeholder="0"
-              value={price}
+              placeholder={onRequest ? "Not shown" : "0"}
+              disabled={onRequest}
+              value={onRequest ? "" : price}
               onChange={(event) => {
-                const text = event.target.value.replace(",", ".");
-                if (!/^\d*\.?\d{0,2}$/.test(text)) return;
+                // Digits with Indian or Western thousands commas ("1,25,000") and up to 2 decimals.
+                const text = event.target.value;
+                if (!/^[\d,]*\.?\d{0,2}$/.test(text)) return;
                 setPrice(text);
-                set({ priceInPence: Math.round((parseFloat(text) || 0) * 100) });
+                set({ priceInPence: parsePrice(text) ?? 0 });
               }}
             />
           </span>
         </Field>
+      </div>
+      <div className="field">
+        <span className="field-label" id={`price-mode-${item.id}`}>
+          Show the price as
+        </span>
+        <div className="segmented" role="group" aria-labelledby={`price-mode-${item.id}`}>
+          {(
+            [
+              ["exact", "Exact"],
+              ["from", "“From” price"],
+              ["on_request", "On request"],
+            ] as const
+          ).map(([mode, label]) => (
+            <button key={mode} type="button" aria-pressed={(item.priceMode ?? "exact") === mode} onClick={() => set({ priceMode: mode === "exact" ? null : mode })}>
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className="hint">
+          {onRequest
+            ? `${capitalise(words.people)} see “Price on request” instead of a price.`
+            : item.priceMode === "from"
+              ? `${capitalise(words.people)} see “From ${symbol}${price || "0"}”, for prices that vary.`
+              : "Use “From” for prices that vary, or “On request” to hide the price."}
+        </p>
       </div>
 
       {indian && (
@@ -579,18 +659,26 @@ function ItemEditor({
         </div>
       )}
 
-      <TextField label="Description (optional)" value={item.description} onChange={(value) => set({ description: value })} multiline maxLength={500} placeholder="What's in it, in a line or two" />
+      <TextField
+        label="Description (optional)"
+        value={item.description}
+        onChange={(value) => set({ description: value })}
+        multiline
+        maxLength={500}
+        placeholder={food ? "What's in it, in a line or two" : "What it is, in a line or two"}
+      />
       <ImageField venueId={venueId} kind="dish" label="Photo (optional)" value={item.imageUrl} onChange={(url) => set({ imageUrl: url })} />
 
       <div className="field">
         <span className="field-label">Tags</span>
         <div className="chips">
-          {MENU_BADGES.map((badge) => (
+          {MENU_BADGES.filter((badge) => food || !FOOD_BADGES.has(badge)).map((badge) => (
             <button key={badge} type="button" className="chip" aria-pressed={(item.badges ?? []).includes(badge)} onClick={() => set({ badges: toggle(item.badges ?? [], badge) })}>
               {indian && badge === "popular" ? "Bestseller" : BADGE_LABELS[badge]}
             </button>
           ))}
           {!indian &&
+            food &&
             DIETARY_TAGS.map((tag) => (
               <button key={tag} type="button" className="chip" aria-pressed={item.dietaryTags.includes(tag)} onClick={() => set({ dietaryTags: toggle(item.dietaryTags, tag) })}>
                 {DIETARY_LABELS[tag]}
@@ -603,8 +691,14 @@ function ItemEditor({
         <summary>More options</summary>
         <div className="more-options-body">
           <div className="switch-list">
-            <SwitchRow title="Today's special" description="Shows in the specials strip at the top of the menu." checked={!!item.featured} onChange={(on) => set({ featured: on })} />
+            <SwitchRow
+              title={food ? "Today's special" : "Featured"}
+              description={food ? "Shows in the specials strip at the top of the menu." : "Shows in the strip at the top of the page."}
+              checked={!!item.featured}
+              onChange={(on) => set({ featured: on })}
+            />
           </div>
+          {food && (
           <Field label="Calories" htmlFor={`kcal-${item.id}`} hint="Shown when “Show calories” is on for this menu.">
             <span className="input-prefix suffix" style={{ maxWidth: 200 }}>
               <input
@@ -621,8 +715,9 @@ function ItemEditor({
               <span aria-hidden>kcal</span>
             </span>
           </Field>
+          )}
 
-          {!indian && (
+          {food && !indian && (
             <div className="field">
               <span className="field-label">Allergens</span>
               <div className="chips">
@@ -635,6 +730,7 @@ function ItemEditor({
             </div>
           )}
 
+          {food && (
           <div className="field">
             <div className="spread">
               <label htmlFor={`explainer-${item.id}`}>“What&apos;s this?” note</label>
@@ -689,12 +785,13 @@ function ItemEditor({
               <p className="hint">Guests tap “What&apos;s this?” under the dish to read it. Leave blank for familiar dishes.</p>
             )}
           </div>
+          )}
         </div>
       </details>
 
       <div className="item-editor-foot">
         <button type="button" className="btn btn-sm btn-ghost btn-danger" onClick={onRemove}>
-          <Trash2 aria-hidden /> Delete dish
+          <Trash2 aria-hidden /> Delete {words.item}
         </button>
         <button type="button" className="btn btn-sm btn-primary" onClick={onClose}>
           Done

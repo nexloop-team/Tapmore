@@ -13,6 +13,7 @@ import { unreadFeedback } from "@/server/repositories/feedback";
 import { listFeedback, venueEngagement, venueStats, venueTotals } from "@/server/repositories/insights";
 import { firstParam, serverOrigin } from "@/server/request";
 import { guestPageUrl } from "@/server/services/qr";
+import { businessProfile, capitalise } from "@/lib/venue/business";
 
 const PERIODS = [7, 30, 90] as const;
 const DAY = 86_400_000;
@@ -103,21 +104,35 @@ export default async function VenueOverview({ params, searchParams }: PageProps<
   const { firstWeek, sinceDay } = venueAge(venue.createdAt);
   const googleLinked = !!config.socialLinks.google && !!config.branding.showGoogleReviewButton;
   const club = config.loyaltyProgram?.stampsEnabled === false;
+  // The business's own words: "Menu" or "Products", "guests" or "customers", "table" or "counter".
+  const profile = businessProfile(config.venueType);
+  const People = capitalise(profile.people);
+  const spot = profile.spot.toLowerCase();
+  const catalogue = profile.catalogue.toLowerCase();
 
   const hostedItems = config.menus.reduce((sum, menu) => sum + menu.sections.reduce((n, section) => n + section.items.length, 0), 0);
   const checklist: { done: boolean; label: string; cta: string; href: string; why: string; icon?: ReactNode; help?: string }[] = [
     { done: !!config.branding.logoUrl, label: "Add your logo", cta: "Upload", href: `${base}/design#logo`, why: "It sits on your page and your printed QR cards." },
-    { done: hostedItems > 0 || config.menus.some((menu) => !!menu.externalUrl), label: "Add your menu", cta: "Add your menu", href: `${base}/menu`, why: "Type it in, or take a photo of your printed menu and we'll read it." },
-    { done: !!config.wifi?.ssid, label: "Share your Wi-Fi", cta: "Add Wi-Fi", href: `${base}/design#wifi`, why: "Guests copy the password in one tap, so nobody has to ask at the counter." },
-    { done: googleLinked, label: "Link your Google reviews", cta: "Add the link", href: `${base}/design#google`, why: "Guests who loved their visit can't find your review page yet. It takes a minute.", help: `${base}/design#google` },
+    {
+      done: hostedItems > 0 || config.menus.some((menu) => !!menu.externalUrl),
+      label: `Add your ${catalogue}`,
+      cta: `Add your ${catalogue}`,
+      href: `${base}/menu`,
+      why: profile.foodFields ? "Type it in, or take a photo of your printed menu and we'll read it." : `Add your featured ${profile.items} and prices, or take a photo of your price list and we'll read it.`,
+    },
+    // Wi-Fi is only part of setup where people wait (cafés, salons, clinics); a shop can still add it on its page.
+    ...(profile.wifi || config.wifi?.ssid
+      ? [{ done: !!config.wifi?.ssid, label: "Share your Wi-Fi", cta: "Add Wi-Fi", href: `${base}/design#wifi`, why: `${People} copy the password in one tap, so nobody has to ask at the counter.` }]
+      : []),
+    { done: googleLinked, label: "Link your Google reviews", cta: "Add the link", href: `${base}/design#google`, why: `${People} who loved their visit can't find your review page yet. It takes a minute.`, help: `${base}/design#google` },
     {
       done: !!config.loyaltyProgram && (config.loyaltyProgram.stampsEnabled === false || !!config.loyaltyProgram.rewardName),
       label: club ? "Set up your members club" : "Set up a stamp card",
       cta: "Set up",
       href: `${base}/loyalty`,
-      why: "Regulars collect stamps on their phone and staff add them at the till.",
+      why: `Regular ${profile.people} collect stamps on their phone and staff add them at the till.`,
     },
-    { done: stats.scans > 0 || both.scans > 0, label: "Print your QR codes and get a first scan", cta: "Print QR codes", href: `${base}/qr`, why: "One per table, so you can see which tables scan most.", icon: <Printer aria-hidden /> },
+    { done: stats.scans > 0 || both.scans > 0, label: "Print your QR codes and get a first scan", cta: "Print QR codes", href: `${base}/qr`, why: `One per ${spot}, so you can see which spots scan most.`, icon: <Printer aria-hidden /> },
   ];
   const done = checklist.filter((item) => item.done).length;
   const next = checklist.find((item) => !item.done) ?? null;
@@ -130,7 +145,7 @@ export default async function VenueOverview({ params, searchParams }: PageProps<
 
   const dishNames = new Map(config.menus.flatMap((menu) => menu.sections.flatMap((section) => section.items.map((item) => [item.id, item.name] as const))));
   const topDishes = engagement.dishes.map((dish) => ({ ...dish, name: dishNames.get(dish.itemId) })).filter((dish): dish is typeof dish & { name: string } => !!dish.name);
-  const featureLabel = (feature: string) => FEATURE_LABELS[feature] ?? (feature === "loyalty" ? (club ? "Members club" : "Stamp card") : feature);
+  const featureLabel = (feature: string) => (feature === "menu" ? profile.catalogue : (FEATURE_LABELS[feature] ?? (feature === "loyalty" ? (club ? "Members club" : "Stamp card") : feature)));
   const maxFeature = Math.max(1, ...engagement.features.map((f) => f.visits));
   const maxHour = Math.max(...engagement.hours);
   const peakHour = maxHour > 0 ? engagement.hours.indexOf(maxHour) : null;
@@ -163,7 +178,9 @@ export default async function VenueOverview({ params, searchParams }: PageProps<
           <PartyPopper aria-hidden />
           <span>
             <strong>Your page is live</strong>
-            <span>Guests can open it now. Put a QR code on each table so they find it.</span>
+            <span>
+              {People} can open it now. Put a QR code on each {spot} so they find it.
+            </span>
           </span>
           <DismissButton cookie={hideCookie} part="live" label="Close" />
         </div>
@@ -250,7 +267,7 @@ export default async function VenueOverview({ params, searchParams }: PageProps<
 
       <div className="stats">
         <Stat label="Scans" value={stats.scans} sub={firstWeek ? sinceDay : <Delta current={stats.scans} previous={previous.scans} days={days} />} />
-        <Stat label="Menu views" value={stats.menuViews} sub={firstWeek ? sinceDay : <Delta current={stats.menuViews} previous={previous.menuViews} days={days} />} />
+        <Stat label={`${profile.catalogue} views`} value={stats.menuViews} sub={firstWeek ? sinceDay : <Delta current={stats.menuViews} previous={previous.menuViews} days={days} />} />
         <Stat
           label="Feedback"
           value={stats.feedbackCount}
@@ -267,7 +284,7 @@ export default async function VenueOverview({ params, searchParams }: PageProps<
           value={club ? stats.totalGuests : stats.stampsGiven}
           sub={firstWeek ? sinceDay : club ? undefined : <CountDelta current={stats.stampsGiven} previous={previous.stamps} days={days} />}
         />
-        <Stat label="Guests" value={stats.totalGuests} sub={firstWeek ? sinceDay : <CountDelta current={stats.newGuests} previous={both.newGuests - stats.newGuests} days={days} />} href={`${base}/guests`} />
+        <Stat label={People} value={stats.totalGuests} sub={firstWeek ? sinceDay : <CountDelta current={stats.newGuests} previous={both.newGuests - stats.newGuests} days={days} />} href={`${base}/guests`} />
       </div>
 
       <div className="overview-grid">
@@ -292,7 +309,7 @@ export default async function VenueOverview({ params, searchParams }: PageProps<
                   <span key={i} style={{ height: `${h}%` }} />
                 ))}
               </div>
-              <p>Your chart fills in as guests scan your table codes. Check back after the weekend.</p>
+              <p>Your chart fills in as {profile.people} scan your QR codes. Check back after the weekend.</p>
             </div>
           )}
         </section>
@@ -300,7 +317,7 @@ export default async function VenueOverview({ params, searchParams }: PageProps<
         <section className="card overview-side">
           <div className="card-head">
             <div>
-              <h2>What guests open</h2>
+              <h2>What {profile.people} open</h2>
               <p>Share of visits that tapped each card</p>
             </div>
           </div>
@@ -319,7 +336,7 @@ export default async function VenueOverview({ params, searchParams }: PageProps<
               ))}
             </ul>
           ) : (
-            <p className="muted">Once guests start tapping your menu, Wi-Fi and stamp card, you&apos;ll see which they use most.</p>
+            <p className="muted">Once {profile.people} start tapping your {catalogue}, Wi-Fi and stamp card, you&apos;ll see which they use most.</p>
           )}
         </section>
       </div>
@@ -347,15 +364,15 @@ export default async function VenueOverview({ params, searchParams }: PageProps<
               </div>
             </div>
           ) : (
-            <p className="muted">You&apos;ll see the hours guests scan most, handy for staffing and specials.</p>
+            <p className="muted">You&apos;ll see the hours {profile.people} scan most, handy for staffing and offers.</p>
           )}
         </section>
 
         <section className="card">
           <div className="card-head">
             <div>
-              <h2>Most viewed dishes</h2>
-              <p>Opened on your menu</p>
+              <h2>Most viewed {profile.items}</h2>
+              <p>Opened on your {catalogue}</p>
             </div>
           </div>
           {topDishes.length > 0 ? (
@@ -369,10 +386,12 @@ export default async function VenueOverview({ params, searchParams }: PageProps<
               ))}
             </ol>
           ) : (
-            <p className="muted">When guests tap dishes on your menu, the favourites show up here.</p>
+            <p className="muted">
+              When {profile.people} tap {profile.items} on your {catalogue}, the favourites show up here.
+            </p>
           )}
           <Link className="link-quiet inline sources-manage" href={`${base}/menu`}>
-            Edit menu <ArrowRight aria-hidden />
+            Edit {catalogue} <ArrowRight aria-hidden />
           </Link>
         </section>
 
@@ -380,7 +399,7 @@ export default async function VenueOverview({ params, searchParams }: PageProps<
           <div className="card-head">
             <div>
               <h2>Where scans came from</h2>
-              <p>Visits per table</p>
+              <p>Visits per QR code</p>
             </div>
           </div>
           {sources.length > 0 ? (
@@ -399,7 +418,7 @@ export default async function VenueOverview({ params, searchParams }: PageProps<
               {others.length > 0 && (
                 <li>
                   <span className="source-row">
-                    <span>Other tables ({others.length})</span>
+                    <span>Other codes ({others.length})</span>
                     <span className="muted num">{otherScans.toLocaleString("en-IN")}</span>
                   </span>
                   <span className="meter muted-meter">
@@ -411,9 +430,9 @@ export default async function VenueOverview({ params, searchParams }: PageProps<
           ) : (
             <p className="muted">Nothing yet.</p>
           )}
-          {sources.length <= 1 && <p className="hint">Print a numbered code for each table to see which tables scan most.</p>}
+          {sources.length <= 1 && <p className="hint">Print a numbered code for each {spot} to see which spots scan most.</p>}
           <Link className="link-quiet inline sources-manage" href={`${base}/qr`}>
-            {sources.length <= 1 ? "Print table codes" : "Manage QR codes"} <ArrowRight aria-hidden />
+            {sources.length <= 1 ? "Print QR codes" : "Manage QR codes"} <ArrowRight aria-hidden />
           </Link>
         </section>
       </div>
@@ -424,7 +443,7 @@ export default async function VenueOverview({ params, searchParams }: PageProps<
         <div className="card-head">
           <div>
             <h2>Latest feedback</h2>
-            <p>{unread.count > 0 ? `${unread.count} unread` : "What guests told you"}</p>
+            <p>{unread.count > 0 ? `${unread.count} unread` : `What ${profile.people} told you`}</p>
           </div>
           <Link className="link-quiet inline" href={`${base}/feedback`}>
             All feedback <ArrowRight aria-hidden />
@@ -443,7 +462,7 @@ export default async function VenueOverview({ params, searchParams }: PageProps<
             ))}
           </ul>
         ) : (
-          <p className="muted">No feedback yet. Guests can leave a note from your page; only you see it.</p>
+          <p className="muted">No feedback yet. {People} can leave a note from your page; only you see it.</p>
         )}
       </section>
 

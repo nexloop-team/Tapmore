@@ -1222,6 +1222,289 @@ body:has(.app) {
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 8px;
 }
+/* Onboarding's business types, in groups (Food & drink, Shops, Services). */
+/* Business types: small icon-and-name chips, five across (two on a phone), so the step fits without scrolling. */
+.business-type-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+@media (max-width: 640px) {
+  .business-type-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.choice.type-choice {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 8px 10px;
+  font-size: 13px;
+  text-align: left;
+  line-height: 1.25;
+}
+.type-choice > svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  color: var(--a-accent);
+}
+/* Design editor's banner photos: up to five upload slots side by side. */
+.banner-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 14px 12px;
+  align-items: start;
+}
+/* Each banner: the photo across its cell (2:1, like the page), buttons underneath. */
+.banner-grid > .field {
+  margin-top: 0;
+}
+.banner-grid .image-field {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+.banner-grid .image-preview.wide {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 2 / 1;
+}
+/* Setup: an inline text button ("Prices in INR. Change"). */
+.link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--a-accent);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+/* Setup's Look step: logo and banner pickers, then the layout choice. */
+.ob-images {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 16px;
+  margin-bottom: 4px;
+}
+/* Setup: items typed in (or read from a photo), name, category and price per row. */
+.ob-import {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  width: 100%;
+  padding: 12px;
+  border: 1px dashed var(--a-border-strong);
+  border-radius: 12px;
+  background: var(--a-surface);
+}
+.ob-import .btn svg {
+  width: 16px;
+  height: 16px;
+}
+.ob-import .is-disabled {
+  opacity: 0.7;
+  pointer-events: none;
+}
+.ob-items > .notice {
+  width: 100%;
+}
+.ob-items {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+.ob-item-head,
+.ob-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.7fr) 110px 36px;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+}
+.ob-item-head {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--a-text-3);
+}
+.ob-item-remove {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--a-text-3);
+  cursor: pointer;
+}
+.ob-item-remove:hover:not(:disabled) {
+  background: var(--a-surface-2);
+  color: var(--a-text);
+}
+.ob-item-remove:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+.ob-item-remove svg {
+  width: 16px;
+  height: 16px;
+}
+/* Indian food menus: a veg mark column. */
+.ob-items-veg .ob-item-head,
+.ob-items-veg .ob-item {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.7fr) 96px 104px 36px;
+}
+@media (max-width: 480px) {
+  .ob-item-head,
+  .ob-item {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.7fr) 72px 32px;
+  }
+  .ob-items-veg .ob-item-head,
+  .ob-items-veg .ob-item {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 0.6fr) 64px 76px 28px;
+  }
+}
+
+.ob-banners {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.ob-add,
+.ob-thumb {
+  position: relative;
+  width: 104px;
+  height: 64px;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.ob-add {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border: 1.5px dashed var(--a-border-strong);
+  background: var(--a-surface);
+  color: var(--a-text-2);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ob-add:hover,
+.ob-add:focus-within {
+  border-color: var(--a-accent);
+  color: var(--a-accent);
+}
+.ob-add svg {
+  width: 18px;
+  height: 18px;
+}
+.ob-add-logo,
+.ob-thumb-logo {
+  width: 64px;
+  border-radius: 50%;
+}
+.ob-add-logo span {
+  font-size: 11px;
+}
+.ob-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.ob-thumb-logo img {
+  object-fit: contain;
+  background: #ffffff;
+}
+.ob-thumb-remove {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  color: #ffffff;
+  cursor: pointer;
+}
+.ob-thumb-logo .ob-thumb-remove {
+  top: 0;
+  right: 0;
+}
+.ob-thumb-remove svg {
+  width: 13px;
+  height: 13px;
+}
+.ob-layouts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+.choice.ob-layout {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 10px;
+  text-align: left;
+}
+.ob-layout > svg {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: var(--a-accent);
+}
+.ob-layout > span {
+  display: grid;
+  min-width: 0;
+}
+.ob-layout strong {
+  font-size: 13px;
+}
+.ob-layout span span {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--a-text-2);
+}
+@media (max-width: 560px) {
+  .ob-images {
+    grid-template-columns: 1fr;
+  }
+  .ob-layout span span {
+    display: none;
+  }
+}
+/* Setup's Google step: connect the Business Profile, or not now. */
+.ob-google {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.choice.ob-google-choice {
+  display: grid;
+  gap: 3px;
+  text-align: left;
+  padding: 12px 14px;
+}
+.ob-google-choice span {
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.4;
+  color: var(--a-text-2);
+}
+/* The picked type's examples, so the owner can check it fits. */
+.type-picked {
+  margin-top: 6px;
+}
 .choice {
   border: 1px solid var(--a-border-strong);
   border-radius: 10px;
@@ -1307,7 +1590,7 @@ body:has(.app) {
 .ob-steps {
   list-style: none;
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 6px;
   padding-bottom: 16px;
 }
@@ -1444,81 +1727,6 @@ body:has(.app) {
     display: none;
   }
 }
-/* A sketch of the guest page, themed by the same code as the real one. */
-.ob-guest {
-  min-height: 100%;
-  padding: 28px 14px;
-  background: var(--page-bg);
-  color: var(--text-primary);
-  font-family: var(--font-ui);
-  transition: background 0.2s var(--a-ease);
-}
-.ob-guest-head {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 18px;
-}
-.ob-guest-head > span:last-child {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-.ob-guest-head strong {
-  font-size: 18px;
-  line-height: 1.2;
-}
-.ob-guest-head strong + span {
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-.ob-guest-logo {
-  width: 64px;
-  height: 64px;
-  flex: none;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: var(--card-bg);
-  color: var(--card-text-primary);
-  font-weight: 700;
-  font-size: 20px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-.ob-guest ul {
-  list-style: none;
-  display: grid;
-  gap: 10px;
-}
-.ob-guest li {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 58px;
-  padding: 0 14px;
-  border-radius: 14px;
-  background: var(--card-bg);
-  color: var(--card-text-primary);
-  box-shadow: var(--card-elevation);
-  font-size: 14px;
-  font-weight: 600;
-}
-.ob-guest-dot {
-  width: 34px;
-  height: 34px;
-  flex: none;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--tint) var(--icon-soft, 14%), transparent);
-  position: relative;
-}
-.ob-guest-dot::after {
-  content: "";
-  position: absolute;
-  inset: 12px;
-  border-radius: 50%;
-  background: var(--tint);
-}
-
 /* ───────────────────────── Staff topbar ───────────────────────── */
 
 
@@ -3720,6 +3928,77 @@ body:has(.app) {
 .preset[aria-pressed="true"] .preset-icon {
   color: var(--a-accent);
 }
+/* Icon style picker: a few sample icons drawn the way the page will draw them. */
+.social-style-grid {
+  max-width: 420px;
+}
+.social-sample {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.social-sample > span {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  color: var(--a-text);
+  background: color-mix(in srgb, var(--a-text) 10%, transparent);
+}
+.social-sample[data-look="outline"] > span {
+  background: transparent;
+  border: 1.5px solid var(--a-text-3);
+}
+.social-sample svg,
+.social-sample-cards svg {
+  width: 16px;
+  height: 16px;
+}
+/* The cards sample: two small rows, or two tiles side by side for the bento. */
+.social-sample-cards {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  margin-bottom: 10px;
+}
+.social-sample-cards.bento {
+  grid-template-columns: 1fr 1fr;
+}
+.social-sample-cards > span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 4px 4px;
+  border-radius: 8px;
+  background: var(--a-surface);
+  border: 1px solid var(--a-border);
+  font-size: 11px;
+  color: var(--a-text);
+}
+.social-sample-cards.bento > span {
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 6px 8px;
+  min-height: 46px;
+  background: color-mix(in srgb, var(--a-text) 6%, var(--a-surface));
+}
+.social-sample-cards i {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, currentColor 14%, transparent);
+}
+.social-sample-cards.bento i {
+  width: auto;
+  height: auto;
+  background: none;
+}
+.social-sample-cards b {
+  font-weight: 600;
+}
 .preset-hint {
   display: block;
   margin-top: 2px;
@@ -4060,9 +4339,6 @@ body:has(.app) {
 .print-sheets[data-style="classic"] :is(.a6-name, .sticker-name) {
   font-family: var(--font-classic), Georgia, serif;
 }
-.print-sheets[data-style="editorial"] :is(.a6-name, .sticker-name) {
-  font-family: var(--font-editorial), Georgia, serif;
-}
 .print-sheets[data-style="modern"] :is(.a6-name, .sticker-name) {
   font-family: var(--font-modern), system-ui, sans-serif;
 }
@@ -4129,8 +4405,13 @@ body:has(.app) {
 }
 .a6-qr img {
   display: block;
-  width: 20cqi;
-  height: 20cqi;
+  width: 27cqi;
+  height: 27cqi;
+}
+/* A tagline takes a line, so the code gives a little room back. */
+.a6-card:has(.a6-tagline) .a6-qr img {
+  width: 24cqi;
+  height: 24cqi;
 }
 .a6-foot {
   margin-top: auto;
@@ -4346,9 +4627,14 @@ body:has(.app) {
   .print-sheets {
     display: block;
   }
+  /* Nothing above the first sheet (the preview's spacing would push it onto a second page). */
+  .qr-sheet-preview {
+    margin: 0 !important;
+  }
+  /* A hair under A4, so rounding never spills a sheet onto an extra blank page. */
   .print-page {
     width: 210mm;
-    height: 297mm;
+    height: 296.5mm;
     box-shadow: none;
     break-after: page;
   }
@@ -5472,22 +5758,6 @@ body:has(.app) {
   font-size: 13px;
   color: var(--a-text-3);
 }
-.ob-guest-head strong {
-  display: block;
-  font-size: 22px;
-  font-weight: 900;
-  line-height: 1;
-  letter-spacing: -0.02em;
-  text-transform: uppercase;
-}
-.ob-guest-tagline {
-  display: block;
-  margin-bottom: 3px;
-  font-size: 9.5px;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
 .ob-own-box {
   padding: 14px;
   border: 1.5px dashed var(--a-border-strong);
@@ -5549,6 +5819,12 @@ body:has(.app) {
   gap: 10px;
 }
 .till-goal {
+  font-size: 13px;
+  color: #5c6166;
+}
+/* The owner's stamp rule ("1 stamp for every ₹500 spent"), under the count. */
+.till-rule {
+  margin: 4px 0 0;
   font-size: 13px;
   color: #5c6166;
 }
@@ -6202,6 +6478,9 @@ body:has(.app) {
   .qr-sheet-preview .print-sheets {
     justify-items: start;
   }
+}
+.qr-copies {
+  max-width: 120px;
 }
 .print-format-pick {
   flex-wrap: wrap;

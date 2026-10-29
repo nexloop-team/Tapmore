@@ -1,8 +1,10 @@
 "use client";
 
-import { Ban, Crown, Plus, Stamp, Trash2, type LucideIcon } from "lucide-react";
+import { Ban, Crown, Plus, Stamp, Trash2, UserPlus, type LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { useLivePreview } from "@/lib/live-preview";
+import { businessProfile, capitalise } from "@/lib/venue/business";
+import { DEFAULT_REFERRAL_OFFERS } from "@/lib/venue/loyalty";
 import type { VenueConfig } from "@/lib/venue/schema";
 import type { VenueSettings } from "@/lib/venue/settings";
 import { BirthdayRewardForm } from "./BirthdayRewardForm";
@@ -16,17 +18,19 @@ type Draft = Pick<VenueConfig, "loyaltyProgram" | "crm">;
 type Program = NonNullable<VenueConfig["loyaltyProgram"]>;
 type Tier = NonNullable<Program["rewardTiers"]>[number];
 
-type Mode = "off" | "stamps" | "membership";
+type Mode = "off" | "stamps" | "referral" | "membership";
 
 const MODES: { value: Mode; label: string; hint: string; icon: LucideIcon }[] = [
   { value: "stamps", label: "Stamp card", hint: "Collect stamps, earn rewards", icon: Stamp },
+  { value: "referral", label: "Refer a friend", hint: "An offer for each friend they bring, no stamps", icon: UserPlus },
   { value: "membership", label: "Members club", hint: "A members list for offers, no stamps", icon: Crown },
   { value: "off", label: "Off", hint: "No loyalty card on your page", icon: Ban },
 ];
 
 function modeOf(program: VenueConfig["loyaltyProgram"]): Mode {
   if (!program) return "off";
-  return program.stampsEnabled === false ? "membership" : "stamps";
+  if (program.stampsEnabled !== false) return "stamps";
+  return program.referralOffers ? "referral" : "membership";
 }
 
 /** Tiers are stored as the full ladder; the editor shows the main reward plus the ones before it. */
@@ -35,15 +39,17 @@ function earlierTiers(program: Program | null | undefined): Tier[] {
   return tiers.length > 1 ? tiers.slice(0, -1) : [];
 }
 
-function compose(main: { rewardName: string; stampsRequired: number }, earlier: Tier[], referral: Program["referral"]): Program {
+function compose(main: { rewardName: string; stampsRequired: number; stampRule?: string | null }, earlier: Tier[], referral: Program["referral"]): Program {
   const sorted = [...earlier].sort((a, b) => a.stampsRequired - b.stampsRequired);
-  return { ...main, stampsEnabled: true, rewardTiers: sorted.length ? [...sorted, main] : undefined, referral };
+  const { stampRule, ...reward } = main;
+  return { ...reward, ...(stampRule ? { stampRule } : {}), stampsEnabled: true, rewardTiers: sorted.length ? [...sorted, reward] : undefined, referral };
 }
 
 const DEFAULT_REFERRAL = { enabled: false, referrerStamps: 2, friendStamps: 1 };
 
 export function LoyaltyEditor({
   venueId,
+  venueType,
   initial,
   referralStats,
   previewUrl,
@@ -52,6 +58,8 @@ export function LoyaltyEditor({
   till,
 }: {
   venueId: string;
+  /** "cafe", "clinic"…: example rewards and words follow it. */
+  venueType?: string | null;
   initial: Draft;
   referralStats?: { joined: number; visited: number };
   /** The guest page in preview mode, which shows this editor's draft. */
@@ -69,26 +77,34 @@ export function LoyaltyEditor({
   const program = draft.loyaltyProgram ?? null;
   const mode = modeOf(program);
   const earlier = earlierTiers(program);
-  const main = { rewardName: program?.rewardName ?? "", stampsRequired: program?.stampsRequired || 9 };
+  const profile = businessProfile(venueType);
+  const main = { rewardName: program?.rewardName ?? "", stampsRequired: program?.stampsRequired || 9, stampRule: program?.stampRule ?? null };
   const crm = draft.crm;
   const setCrm = (patch: Partial<Draft["crm"]>) => update("crm", { ...crm, ...patch });
 
   function setMode(next: Mode) {
     if (next === "off") update("loyaltyProgram", null);
     else if (next === "membership") update("loyaltyProgram", { rewardName: "", stampsRequired: 0, stampsEnabled: false });
-    else update("loyaltyProgram", compose({ rewardName: main.rewardName || "Free coffee", stampsRequired: main.stampsRequired }, earlier, program?.referral));
+    else if (next === "referral") update("loyaltyProgram", { rewardName: "", stampsRequired: 0, stampsEnabled: false, referralOffers: program?.referralOffers ?? DEFAULT_REFERRAL_OFFERS });
+    else
+      update(
+        "loyaltyProgram",
+        compose({ rewardName: main.rewardName || profile.defaultReward, stampsRequired: main.stampsRequired, stampRule: main.stampRule ?? (profile.stampRule || null) }, earlier, program?.referral),
+      );
   }
 
   const referral = program?.referral ?? DEFAULT_REFERRAL;
   const setMain = (patch: Partial<typeof main>) => update("loyaltyProgram", compose({ ...main, ...patch }, earlier, program?.referral));
   const setEarlier = (tiers: Tier[]) => update("loyaltyProgram", compose(main, tiers, program?.referral));
   const setReferral = (patch: Partial<typeof referral>) => update("loyaltyProgram", compose(main, earlier, { ...referral, ...patch }));
+  const offers = program?.referralOffers ?? DEFAULT_REFERRAL_OFFERS;
+  const setOffers = (patch: Partial<typeof offers>) => update("loyaltyProgram", { rewardName: "", stampsRequired: 0, stampsEnabled: false, referralOffers: { ...offers, ...patch } });
 
   const tabs: EditorTab[] = [
     { id: "programme", label: "Rewards" },
     { id: "capture", label: "Guest info" },
-    // The till stamps and redeems; a members club has no stamps and no card code to scan.
-    ...(mode === "stamps" ? [{ id: "till", label: "Till", anchors: ["staff", "devices"] }] : []),
+    // The till stamps, redeems and gives refer-a-friend offers; a members club has no card code to scan.
+    ...(mode === "stamps" || mode === "referral" ? [{ id: "till", label: "Till", anchors: ["staff", "devices"] }] : []),
   ];
   const [tab, setTab] = useEditorTab(tabs);
   useLivePreview(draft);
@@ -101,7 +117,8 @@ export function LoyaltyEditor({
 
         {tab === "programme" && (
           <EditorPanel id="programme">
-            <Card title="Loyalty programme" description="Guests join with their email and get a card on their phone.">
+            <Card title="Loyalty programme" description={`${capitalise(profile.people)} join with their email and get a card on their phone.`}>
+              {profile.professionalRules && <p className="hint" style={{ marginBottom: 12 }}>Check your professional and legal rules before offering rewards.</p>}
               <div className="preset-grid" role="group" aria-label="Loyalty programme">
                 {MODES.map((option) => (
                   <button key={option.value} type="button" className="preset" aria-pressed={mode === option.value} onClick={() => setMode(option.value)}>
@@ -116,9 +133,9 @@ export function LoyaltyEditor({
             </Card>
 
             {mode === "stamps" && (
-              <Card title="Rewards" description="Staff add a stamp per visit. When the card is full, the guest gets the main reward and starts again.">
+              <Card title="Rewards" description="Staff add a stamp when it's earned. When the card is full, the main reward is theirs and the card starts again.">
                 <div className="row">
-                  <TextField label="Main reward" value={main.rewardName} onChange={(value) => setMain({ rewardName: value ?? "" })} placeholder="Free coffee" maxLength={80} />
+                  <TextField label="Main reward" value={main.rewardName} onChange={(value) => setMain({ rewardName: value ?? "" })} placeholder={profile.defaultReward || "e.g. 10% off your next visit"} maxLength={80} />
                   <Field label="Stamps needed" htmlFor="stamps-required">
                     <input
                       id="stamps-required"
@@ -131,6 +148,14 @@ export function LoyaltyEditor({
                     />
                   </Field>
                 </div>
+                <TextField
+                  label="How a stamp is earned (optional)"
+                  value={main.stampRule}
+                  onChange={(value) => setMain({ stampRule: value })}
+                  placeholder={profile.stampRule || "e.g. 1 stamp per visit"}
+                  maxLength={80}
+                  hint="Shown on the card, when people join and at the till. Staff still decide when to stamp."
+                />
 
                 <div className="field" style={{ marginTop: 18 }}>
                   <span className="field-label">Smaller rewards on the way (optional)</span>
@@ -141,7 +166,7 @@ export function LoyaltyEditor({
                           <input
                             className="input"
                             aria-label="Reward"
-                            placeholder="Free pastry"
+                            placeholder="A smaller reward"
                             value={tier.rewardName}
                             maxLength={80}
                             onChange={(event) => setEarlier(earlier.map((t, i) => (i === index ? { ...t, rewardName: event.target.value } : t)))}
@@ -205,6 +230,35 @@ export function LoyaltyEditor({
                 )}
                 {referral.enabled && <p className="hint" style={{ marginTop: 10 }}>To stop abuse, a member can earn invite stamps at most 5 times a month, and only after a real visit.</p>}
                 {referralStats && (referralStats.joined > 0 || referral.enabled) && (
+                  <p className="hint" style={{ marginTop: 6 }}>
+                    So far: {referralStats.joined} friend{referralStats.joined === 1 ? "" : "s"} joined through an invite, {referralStats.visited} visited.
+                  </p>
+                )}
+              </Card>
+            )}
+
+            {mode === "referral" && (
+              <Card
+                title="Refer a friend"
+                description={`Members get a card with an invite link. A friend who joins through it gets a welcome offer on their first visit, and the member gets a reward for each friend who comes in. Staff give both by scanning the card.`}
+              >
+                <TextField
+                  label="The friend gets, on their first visit"
+                  value={offers.friend}
+                  onChange={(value) => setOffers({ friend: value ?? "" })}
+                  placeholder={DEFAULT_REFERRAL_OFFERS.friend}
+                  maxLength={80}
+                />
+                <TextField
+                  label="The member who invited them gets"
+                  value={offers.member}
+                  onChange={(value) => setOffers({ member: value ?? "" })}
+                  placeholder={DEFAULT_REFERRAL_OFFERS.member}
+                  maxLength={80}
+                  hint="Given at the till on their next visit, once per friend."
+                />
+                <p className="hint" style={{ marginTop: 10 }}>To stop abuse, a member can earn at most 5 friend rewards a month, and only after the friend really visits.</p>
+                {referralStats && (
                   <p className="hint" style={{ marginTop: 6 }}>
                     So far: {referralStats.joined} friend{referralStats.joined === 1 ? "" : "s"} joined through an invite, {referralStats.visited} visited.
                   </p>

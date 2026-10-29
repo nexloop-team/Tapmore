@@ -1,6 +1,8 @@
-# Tapmore — self-serve QR pages for hospitality venues
+# Tapmore — self-serve QR pages for local businesses
 
-Venue owners sign up, answer four onboarding questions and get a live guest page with printable QR codes, all without help from us. A guest who scans a table QR code gets the menu, Wi-Fi, a loyalty card that staff stamp at the till, a private feedback box with a Google review invitation for every guest, and a Sudoku to pass the time. Owners manage everything from a dashboard, can connect their Google Business Profile so every Google review gets a reply (AI-drafted, posted automatically or after approval), and pay one yearly subscription per venue. Guest-page behaviour is modelled on the analysis in [docs/candour-analysis.md](docs/candour-analysis.md), with our own brand, copy and backend.
+Owners of cafés, restaurants, shops, showrooms, pharmacies, salons, clinics, gyms and other local businesses sign up, go through a five-step setup and get a live customer page with printable QR codes, all without help from us. A customer who scans a QR code gets the menu (or the products or services), Wi-Fi, a loyalty card that staff stamp at the till, a private feedback box with a Google review invitation for every customer, and a Sudoku to pass the time.
+
+The business type changes only the wording and defaults ([business.ts](src/lib/venue/business.ts)): a shop gets "Products", "Counter 1" and "customers"; a salon gets "Services" and a booking link; food businesses keep veg marks, allergens and calories, which other types never show. Data, routes and code names stay venue / menu / table throughout. Owners manage everything from a dashboard, can connect their Google Business Profile so every Google review gets a reply (AI-drafted, posted automatically or after approval), and pay one yearly subscription per venue. Guest-page behaviour is modelled on the analysis in [docs/candour-analysis.md](docs/candour-analysis.md), with our own brand, copy and backend.
 
 Plans, to-dos, decisions and the change log live in [docs/ROADMAP.md](docs/ROADMAP.md).
 
@@ -23,20 +25,24 @@ Migrations run automatically on start; restart the dev server after pulling a sc
 
 ### Try the owner flow locally
 
-1. Open `/signup` and create an account. You land in the onboarding wizard, and the venue starts on a 7-day free trial (no card).
+1. Open `/signup` and create an account. You land in the setup wizard (business, menu or products, look, online, rewards), and the venue starts on a 7-day free trial (no card). Items can be typed in with categories, imported from photos with AI, or linked from another website.
 2. Edit the guest page, menu and loyalty settings from the dashboard. The phone preview reloads on save.
 3. Download QR codes or a print sheet of table cards from **QR codes**.
 4. Emails aren't sent in development. They go to the `outbox` table and the server log, so copy the verification or reset link from there.
 5. To see `/admin`, put your email in `ADMIN_EMAILS` and verify it.
 6. Billing runs in **dev mode** without Razorpay keys: "Subscribe" switches the venue on for a year instantly and "Cancel subscription" ends it straight away.
 
-Three demo venues are seeded on first start (free access, no owner; hidden from the admin console and its numbers):
+Five demo venues are seeded on first start (free access, no owner; hidden from the admin console and its numbers):
 
 | URL | Shows |
 |---|---|
 | `/s?i=demo` | Stamp card with reward tiers, hosted menu, plain Wi-Fi, Sudoku |
 | `/s?i=demo-crm` | Honeycomb Café: Bento tiles on White & Honey, Indian menu (₹, veg / non-veg marks), Wi-Fi email gate, birthday ask |
 | `/s?i=demo-rewards` | Rewards-only membership, external ordering link, custom link cards |
+| `/s?i=demo-salon` | Glow Salon: services with "From" prices, booking link, a stamp per visit |
+| `/s?i=demo-shop` | Sharma General Store: featured products and offers, a stamp per ₹500 spent |
+
+**Rewards** come in three kinds: a stamp card (optionally with refer-a-friend stamps), a rewards-only members' club, or **refer a friend only**, with no stamps. With refer a friend only, a member shares their link; the friend gets the owner's offer (e.g. 10% off) on their first visit, and the member gets theirs once the friend has been in. Staff give both from the till ("Give welcome offer", "Give friend reward").
 
 ## Subscription
 
@@ -149,7 +155,7 @@ Payment receipts and renewal notices come from Razorpay. Resend's free plan send
 |---|---|
 | `/` | Marketing page with pricing and demos |
 | `/signup`, `/login`, `/forgot-password`, `/reset-password` | Accounts (email + password) |
-| `/onboarding` | Four-step wizard that creates a venue |
+| `/onboarding` | Five-step setup wizard that creates a venue (business, menu or products, look, online, rewards) |
 | `/dashboard` | Venue list (or straight into your only venue) |
 | `/dashboard/<venue>` | Overview: scans, guests, feedback, setup checklist |
 | `/dashboard/<venue>/design`, `/menu`, `/loyalty` | Editors for the guest page, menus and loyalty/capture |
@@ -166,7 +172,7 @@ Payment receipts and renewal notices come from Razorpay. Resend's free plan send
 | Path | What |
 |---|---|
 | `/s?i=<code>&s=<source>` | Landing page (server-rendered, venue theme applied before first paint). `cta=box\|anon` forces the feedback-card A/B variant. |
-| `/menu?i=<code>` | Hosted menu: search, section jump bar, allergen filter, dietary tags |
+| `/menu?i=<code>` | Hosted menu, products or services: search, section jump bar; food businesses also get the allergen filter and dietary tags. Each business group has its own looks (cards with photos or a printed menu; a product grid or a simple list; a service list or a rate card), and shops and services can add "Ask/Book on WhatsApp" buttons |
 | `/card/<id>?t=<token>` | Member's web card (linked from the enrolment email), where they can also delete their card and details |
 | `/consent?token=` | Old offers-confirmation links (offers consent is no longer asked; joining is agreeing to the membership) |
 | `/privacy`, `/terms`, `/refunds`, `/shipping`, `/contact` | Privacy policy (DPDP), terms, cancellation and refunds, delivery policy, contact |

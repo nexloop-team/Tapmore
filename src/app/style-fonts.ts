@@ -1,4 +1,4 @@
-import { Outfit, Petrona, Playfair_Display } from "next/font/google";
+import { Outfit, Playfair_Display } from "next/font/google";
 
 /**
  * The style presets' display faces (see lib/theme), served from our own
@@ -8,8 +8,7 @@ import { Outfit, Petrona, Playfair_Display } from "next/font/google";
  * so one file covers every weight.
  */
 const classic = Playfair_Display({ variable: "--font-classic", subsets: ["latin", "latin-ext"], display: "swap", preload: false });
-const editorial = Petrona({ variable: "--font-editorial", subsets: ["latin", "latin-ext"], display: "swap", preload: false });
 const modern = Outfit({ variable: "--font-modern", subsets: ["latin", "latin-ext"], display: "swap", preload: false });
 
-/** Classes that define --font-classic, --font-editorial and --font-modern. */
-export const styleFontVariables = [classic.variable, editorial.variable, modern.variable].join(" ");
+/** Classes that define --font-classic and --font-modern. */
+export const styleFontVariables = [classic.variable, modern.variable].join(" ");

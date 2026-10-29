@@ -23,6 +23,7 @@ export function DishSheet({
   tags,
   details,
   labels,
+  action,
   onClose,
 }: {
   item: MenuItem | null;
@@ -31,6 +32,8 @@ export function DishSheet({
   /** Allergens and kcal, already worded. */
   details: string[];
   labels: DishSheetLabels;
+  /** Under the details: "Ask on WhatsApp" for a product or service. */
+  action?: ReactNode;
   onClose: () => void;
 }) {
   const closeButton = useRef<HTMLButtonElement>(null);
@@ -93,6 +96,7 @@ export function DishSheet({
                   <p className="menu-explainer-note">{labels.explainerNote}</p>
                 </section>
               )}
+              {action}
             </div>
           </>
         )}

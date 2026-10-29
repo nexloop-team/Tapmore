@@ -21,6 +21,7 @@ type M = {
   venues: typeof import("./repositories/venues");
   guestEmails: typeof import("./jobs/guest-emails");
   ai: typeof import("./services/ai");
+  card: typeof import("./services/card");
 };
 let m: M;
 
@@ -38,6 +39,7 @@ beforeAll(async () => {
     venues: await import("./repositories/venues"),
     guestEmails: await import("./jobs/guest-emails"),
     ai: await import("./services/ai"),
+    card: await import("./services/card"),
   };
 });
 
@@ -60,7 +62,7 @@ async function setup() {
   });
   const device = { id: `dev_r${seq}`, venueId: record.id, label: "Till" };
   (await (await m.db.getDb()).run("INSERT INTO staff_devices (id, venue_id, label) VALUES (?, ?, 'Till')", device.id, record.id));
-  return { venueId: record.id, device };
+  return { venueId: record.id, device, record };
 }
 
 async function join(venueId: string, email: string, ref?: string) {
@@ -128,6 +130,88 @@ describe("refer a friend", () => {
     const events = (await (await m.db.getDb()).get("SELECT COUNT(*) AS n FROM stamp_events WHERE card_id = ? AND kind = 'referral'", inviter.cardId)) as { n: number };
     expect(events.n).toBe(3);
     expect((await m.cards.findCardById(await m.db.getDb(), inviter.cardId))?.stamps).toBe(6);
+  });
+});
+
+describe("refer a friend without stamps", () => {
+  /** A venue whose only reward is refer-a-friend: 10% off for the friend, a free haircut for the member. */
+  async function offersVenue() {
+    const { venueId, device, record } = await setup();
+    await m.admin.updateVenue(record, {
+      config: { loyaltyProgram: { rewardName: "", stampsRequired: 0, stampsEnabled: false, referralOffers: { friend: "10% off", member: "Free haircut" } } },
+    });
+    return { venueId, device };
+  }
+
+  it("is set up from the wizard as offers with no stamp card", async () => {
+    const config = m.schema.initialVenueConfig(
+      m.schema.createVenueRequest.parse({ name: "Glow", venueType: "salon", currencyCode: "INR", referralOffers: { friend: "10% off", member: "Free haircut" } }),
+      (prefix) => `${prefix}_1`,
+    );
+    expect(config.loyaltyProgram).toEqual({ rewardName: "", stampsRequired: 0, stampsEnabled: false, referralOffers: { friend: "10% off", member: "Free haircut" } });
+  });
+
+  it("gives the friend's welcome offer once, earns the inviter a reward, and the till gives it", async () => {
+    const { venueId, device } = await offersVenue();
+    const inviter = await join(venueId, "member@example.com");
+    const code = await m.retention.ensureReferralCode(inviter.cardId);
+    const friend = await join(venueId, "pal@example.com", code);
+    const db = await m.db.getDb();
+
+    // The friend joined through the invite: no stamps, a welcome offer waiting.
+    expect((await m.cards.findCardById(db, friend.cardId))?.stamps).toBe(0);
+    const before = await m.staff.viewCard(device, friend.cardId);
+    expect(before.offers).toEqual({ welcome: "10% off", ready: 0, member: "Free haircut" });
+    // The member's own card (no invite behind it) has nothing to give yet, but has the code staff scan and an invite link.
+    expect((await m.staff.viewCard(device, inviter.cardId)).offers).toEqual({ welcome: null, ready: 0, member: "Free haircut" });
+    const memberCard = await m.card.memberCardView(inviter.cardId, (await m.cards.findCardById(db, inviter.cardId))!.access_token, "http://localhost:3000");
+    expect(memberCard?.staffQrSvg).toContain("<svg");
+    expect(memberCard?.invite?.url).toContain(`ref=${code}`);
+
+    const after = await m.staff.giveWelcomeOffer(device, friend.cardId);
+    expect(after.offers?.welcome).toBeNull();
+    await expect(m.staff.giveWelcomeOffer(device, friend.cardId)).rejects.toThrow(/no welcome offer/);
+    expect(await outboxCount("Your friend visited")).toBeGreaterThan(0);
+
+    expect((await m.staff.viewCard(device, inviter.cardId)).offers?.ready).toBe(1);
+    const given = await m.staff.giveFriendReward(device, inviter.cardId);
+    expect(given.offers?.ready).toBe(0);
+    await expect(m.staff.giveFriendReward(device, inviter.cardId)).rejects.toThrow(/No friend reward/);
+
+    // Undo the reward: it's waiting again.
+    expect((await m.staff.undoLast(device, inviter.cardId)).offers?.ready).toBe(1);
+  });
+
+  it("undoing a welcome offer reopens it and takes back the inviter's reward", async () => {
+    const { venueId, device } = await offersVenue();
+    const inviter = await join(venueId, "undo-member@example.com");
+    const friend = await join(venueId, "undo-pal@example.com", await m.retention.ensureReferralCode(inviter.cardId));
+    await m.staff.giveWelcomeOffer(device, friend.cardId);
+    expect((await m.staff.viewCard(device, inviter.cardId)).offers?.ready).toBe(1);
+
+    const undone = await m.staff.undoLast(device, friend.cardId);
+    expect(undone.offers?.welcome).toBe("10% off");
+    expect((await m.staff.viewCard(device, inviter.cardId)).offers?.ready).toBe(0);
+  });
+
+  it("gives a retried welcome once, and caps friend rewards at five a month", async () => {
+    const { venueId, device } = await offersVenue();
+    const inviter = await join(venueId, "busy@example.com");
+    const code = await m.retention.ensureReferralCode(inviter.cardId);
+    for (let i = 0; i < 7; i++) {
+      const friend = await join(venueId, `pal${i}@example.com`, code);
+      await m.staff.giveWelcomeOffer(device, friend.cardId, `req_${venueId}_${i}`);
+      // The till resent the same tap: nothing changes.
+      await m.staff.giveWelcomeOffer(device, friend.cardId, `req_${venueId}_${i}`);
+    }
+    expect((await m.staff.viewCard(device, inviter.cardId)).offers?.ready).toBe(5);
+  });
+
+  it("refuses the offer actions on a stamp card", async () => {
+    const { venueId, device } = await setup();
+    const member = await join(venueId, "stamps@example.com");
+    expect((await m.staff.viewCard(device, member.cardId)).offers).toBeNull();
+    await expect(m.staff.giveWelcomeOffer(device, member.cardId)).rejects.toThrow(/refer-a-friend/);
   });
 });
 

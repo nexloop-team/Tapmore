@@ -1,6 +1,6 @@
 "use client";
 
-import { ChefHat, ChevronLeft, Flame, Info, Leaf, Menu as MenuLines, Search, Sparkles, Sprout, Star, WheatOff, X, type LucideIcon } from "lucide-react";
+import { ChefHat, ChevronLeft, Flame, Info, Leaf, Menu as MenuLines, MessageCircle, Search, Sparkles, Sprout, Star, WheatOff, X, type LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { scrollMotion } from "@/lib/browser";
 import { createTracker } from "@/lib/analytics";
@@ -10,6 +10,9 @@ import { computeTheme } from "@/lib/theme";
 import { safeImageUrl } from "@/lib/venue/features";
 import type { Menu, MenuItem, VenueBranding } from "@/lib/venue/types";
 import { ALLERGENS } from "@/lib/venue/constants";
+import { businessProfile } from "@/lib/venue/business";
+import { menuLook } from "@/lib/venue/menu-looks";
+import { whatsappLink } from "@/lib/venue/whatsapp";
 import { isIndianMenu, menuPriceFormat } from "@/lib/venue/region";
 import { DishSheet } from "./DishSheet";
 import { MenuBrowseSheet } from "./MenuBrowseSheet";
@@ -34,6 +37,9 @@ const FOOD_TYPE_KEYS: Record<NonNullable<MenuItem["foodType"]>, MessageKey> = { 
 
 /** Indian menus filter on the food mark: one of these at a time. */
 const FOOD_FILTERS: string[] = ["veg", "nonveg", "egg"];
+
+/** The list each look draws its items in. */
+const ITEM_LISTS: Record<ReturnType<typeof menuLook>, string> = { list: "dish-list", classic: "classic-list", grid: "product-grid", simple: "simple-list", service: "service-list" };
 
 /** Filter chips offered when at least one dish carries the tag, in this order. */
 const DIET_FILTERS = ["vegan", "vegetarian", "gluten_free"] as const;
@@ -73,6 +79,10 @@ interface MenuViewProps {
   venueName: string;
   branding: VenueBranding;
   currencyCode: string;
+  /** "cafe", "shop"…: shops and services see no allergens, veg marks or calories, and their own words. */
+  venueType?: string | null;
+  /** The business's WhatsApp, for "Ask on WhatsApp" on products and services. */
+  whatsapp?: string | null;
   menus: Menu[];
   locale: Locale;
   source: string;
@@ -81,16 +91,47 @@ interface MenuViewProps {
   team?: boolean;
 }
 
-/** What the menu editor sends its preview frame: the unsaved menus, opened on the one being edited. */
+/**
+ * What a preview frame is sent: the menu editor's unsaved menus (opened on
+ * the one being edited), or the setup wizard's whole draft page, whose name,
+ * type, currency and colours replace the demo's underneath.
+ */
 interface MenuDraft {
-  menus: Menu[];
-  menuId: string | null;
+  /** Absent when another editor's frame was navigated here (the Customer page sends colours and contacts only). */
+  menus?: Menu[];
+  menuId?: string | null;
+  name?: string;
+  venueType?: string | null;
+  currencyCode?: string;
+  branding?: VenueBranding;
+  whatsapp?: string | null;
 }
 
-export function MenuView({ venueId, venueName, branding, currencyCode, menus: savedMenus, locale, source, backHref, team = false }: MenuViewProps) {
+export function MenuView({
+  venueId,
+  venueName: savedName,
+  branding: savedBranding,
+  currencyCode: savedCurrency,
+  venueType: savedType,
+  whatsapp: savedWhatsapp,
+  menus: savedMenus,
+  locale,
+  source,
+  backHref,
+  team = false,
+}: MenuViewProps) {
   const draft = usePreviewDraft<MenuDraft>(source === "preview");
+  const venueName = draft?.name ?? savedName;
+  const branding = draft?.branding ?? savedBranding;
+  const currencyCode = draft?.currencyCode ?? savedCurrency;
+  const venueType = draft?.venueType !== undefined ? draft.venueType : savedType;
+  const whatsapp = draft?.whatsapp !== undefined ? draft.whatsapp : savedWhatsapp;
   // Only hosted menus with dishes, the same rule the page applies to saved menus.
-  const menus = useMemo(() => (draft ? draft.menus.filter((m) => !m.externalUrl && m.sections.some((s) => s.items.length > 0)) : savedMenus), [draft, savedMenus]);
+  const draftMenus = Array.isArray(draft?.menus) ? draft.menus : null;
+  const menus = useMemo(
+    () => (draftMenus ? draftMenus.filter((m) => !m.externalUrl && m.sections.some((s) => s.items.length > 0)) : savedMenus),
+    [draftMenus, savedMenus],
+  );
   const { t, tf } = useMemo(() => createTranslator(locale), [locale]);
   const track = useMemo(() => createTracker({ venueId, source, page: "menu", team }), [venueId, source, team]);
   const formatPrice = useMemo(() => priceFormatter(locale, currencyCode), [locale, currencyCode]);
@@ -108,8 +149,23 @@ export function MenuView({ venueId, venueName, branding, currencyCode, menus: sa
   const focused = draft?.menuId ? menus.findIndex((m) => m.id === draft.menuId) : -1;
   const shownIndex = focused >= 0 ? focused : Math.min(menuIndex, Math.max(0, menus.length - 1));
   const menu = menus[shownIndex] ?? null;
-  const sections = useMemo(() => (menu ? [...menu.sections].sort((a, b) => a.sortOrder - b.sortOrder).filter((s) => s.items.length > 0) : []), [menu]);
-  const indian = isIndianMenu(currencyCode);
+  const profile = useMemo(() => businessProfile(venueType), [venueType]);
+  const food = profile.foodFields;
+  const sections = useMemo(() => {
+    const sorted = menu ? [...menu.sections].sort((a, b) => a.sortOrder - b.sortOrder).filter((s) => s.items.length > 0) : [];
+    if (profile.foodFields) return sorted;
+    // A shop or salon never shows food details, even ones saved before its type changed.
+    return sorted.map((section) => ({
+      ...section,
+      items: section.items.map((item) => ({ ...item, allergens: [], dietaryTags: [], foodType: null, calories: null, explainer: null, badges: item.badges?.filter((b) => b !== "spicy" && b !== "chef") })),
+    }));
+  }, [menu, profile]);
+  const indian = food && isIndianMenu(currencyCode);
+  /** "₹499", "From ₹499" or "Price on request". */
+  const priceText = (item: MenuItem) =>
+    item.priceMode === "on_request" ? t("price_on_request") : item.priceMode === "from" ? tf("price_from", { price: formatPrice(item.priceInPence) }) : formatPrice(item.priceInPence);
+  const unavailable = t(profile.group === "food" ? "menu_unavailable" : profile.group === "retail" ? "menu_unavailable_retail" : "menu_unavailable_service");
+  const title = food ? t("menu_title") : profile.catalogue;
   // Indian menus skip the 14 allergens and filter on the veg mark instead.
   const allergens = useMemo(() => (indian ? [] : [...new Set(sections.flatMap((s) => s.items.flatMap((i) => i.allergens.map((a) => a.toLowerCase()))))].sort()), [sections, indian]);
   const dietOptions = useMemo<string[]>(() => {
@@ -227,7 +283,9 @@ export function MenuView({ venueId, venueName, branding, currencyCode, menus: sa
 
   const current = activeSection ?? visibleSections[0]?.id ?? null;
   // Two looks: the card list (also what the retired "photo" layout shows) and the printed classic.
-  const layout = menu?.layout === "classic" ? "classic" : "list";
+  // The look follows the kind of business (lib/venue/menu-looks); "classic" has its own header and type, the rest share the list's.
+  const look = menuLook(menu?.layout, profile.group);
+  const layout = look === "classic" ? "classic" : "list";
 
   /** The dish's labels, as small coloured text over its name: badges first, then (outside India) dietary tags. */
   function labels(item: MenuItem): { key: string; label: string; icon: LucideIcon }[] {
@@ -263,7 +321,7 @@ export function MenuView({ venueId, venueName, branding, currencyCode, menus: sa
             )}
             <span className="dish-name">{item.name}</span>
             <span className="dish-price-line">
-              {item.isAvailable ? <span className="dish-price">{formatPrice(item.priceInPence)}</span> : <span className="dish-sold-out">{t("menu_unavailable")}</span>}
+              {item.isAvailable ? <span className="dish-price">{priceText(item)}</span> : <span className="dish-sold-out">{unavailable}</span>}
               {showKcal && <span className="dish-kcal">{tf("menu_kcal", { kcal: item.calories as number })}</span>}
             </span>
             {item.description && <span className="dish-desc">{item.description}</span>}
@@ -277,6 +335,82 @@ export function MenuView({ venueId, venueName, branding, currencyCode, menus: sa
           {/* eslint-disable-next-line @next/next/no-img-element -- merchant image on any host */}
           {image && <img className="dish-photo" src={image} alt="" loading="lazy" />}
         </button>
+      </li>
+    );
+  }
+
+  /**
+   * Shops and services: a chat with the business, the item named in the
+   * message. Off unless the owner turns it on: someone who scanned in the
+   * shop just asks; it's for a page shared online (Instagram, Google).
+   */
+  function askLink(item: MenuItem): string | null {
+    if (food || menu?.askWhatsapp !== true || !item.isAvailable) return null;
+    const text =
+      profile.group === "service"
+        ? tf("menu_book_text", { venue: venueName, item: item.name })
+        : tf("menu_ask_text", { venue: venueName, item: item.name, price: priceText(item) });
+    return whatsappLink(whatsapp, currencyCode, text);
+  }
+
+  function askButton(item: MenuItem, className: string) {
+    const href = askLink(item);
+    if (!href) return null;
+    return (
+      <a className={className} href={href} target="_blank" rel="noopener noreferrer" onClick={() => track("menu_whatsapp_tapped", { item: item.name.slice(0, 60) })}>
+        <MessageCircle aria-hidden />
+        {t(profile.group === "service" ? "menu_book_whatsapp" : "menu_ask_whatsapp")}
+      </a>
+    );
+  }
+
+  /** Shops and showrooms: a photo grid like an online shop, two to a row, name and price under the photo. */
+  function gridItem(item: MenuItem) {
+    const image = safeImageUrl(item.imageUrl);
+    return (
+      <li key={item.id} id={`item-${item.id}`} className={`product-card${item.isAvailable ? "" : " unavailable"}`}>
+        <button type="button" className="product-open" aria-haspopup="dialog" onClick={() => showDish(item, "list")}>
+          <span className={`product-photo${image ? "" : " placeholder"}`} aria-hidden>
+            {/* eslint-disable-next-line @next/next/no-img-element -- merchant image on any host */}
+            {image ? <img src={image} alt="" loading="lazy" /> : item.name.trim().charAt(0)}
+          </span>
+          <span className="product-name">{item.name}</span>
+          {item.isAvailable ? <span className="product-price">{priceText(item)}</span> : <span className="dish-sold-out">{unavailable}</span>}
+        </button>
+        {askButton(item, "ask-wa ask-wa-small")}
+      </li>
+    );
+  }
+
+  /** Stores with hundreds of items: one line each, name and price, nothing else. */
+  function simpleItem(item: MenuItem) {
+    return (
+      <li key={item.id} id={`item-${item.id}`} className={`simple-item${item.isAvailable ? "" : " unavailable"}`}>
+        <button type="button" className="simple-open" aria-haspopup="dialog" onClick={() => showDish(item, "list")}>
+          <span className="simple-name">{item.name}</span>
+          {item.isAvailable ? <span className="simple-price">{priceText(item)}</span> : <span className="dish-sold-out">{unavailable}</span>}
+        </button>
+      </li>
+    );
+  }
+
+  /** Salons, clinics, gyms: the service and its price on one line, what's included under it, and a booking button. */
+  function serviceItem(item: MenuItem) {
+    const image = safeImageUrl(item.imageUrl);
+    return (
+      <li key={item.id} id={`item-${item.id}`} className={`service-item${item.isAvailable ? "" : " unavailable"}`}>
+        <button type="button" className="service-open" aria-haspopup="dialog" onClick={() => showDish(item, "list")}>
+          <span className="service-body">
+            <span className="service-line">
+              <span className="service-name">{item.name}</span>
+              {item.isAvailable ? <span className="service-price">{priceText(item)}</span> : <span className="dish-sold-out">{unavailable}</span>}
+            </span>
+            {item.description && <span className="service-desc">{item.description}</span>}
+          </span>
+          {/* eslint-disable-next-line @next/next/no-img-element -- merchant image on any host */}
+          {image && <img className="service-photo" src={image} alt="" loading="lazy" />}
+        </button>
+        {askButton(item, "ask-wa ask-wa-small")}
       </li>
     );
   }
@@ -304,7 +438,7 @@ export function MenuView({ venueId, venueName, branding, currencyCode, menus: sa
               {item.name}
             </span>
             <span className="classic-leader" aria-hidden />
-            <span className="classic-price">{item.isAvailable ? formatPrice(item.priceInPence) : t("menu_unavailable")}</span>
+            <span className="classic-price">{item.isAvailable ? priceText(item) : unavailable}</span>
           </span>
           {item.description && <span className="classic-desc">{item.description}</span>}
           {(details.length > 0 || explainer) && (
@@ -368,7 +502,7 @@ export function MenuView({ venueId, venueName, branding, currencyCode, menus: sa
             </a>
             <h1>{venueName}</h1>
             <p className="classic-kicker">
-              <span>{menu && menus.length > 1 ? menu.name : t("menu_title")}</span>
+              <span>{menu && menus.length > 1 ? menu.name : title}</span>
             </p>
             {menu?.welcomeText?.trim() && <p className="classic-welcome">{menu.welcomeText.trim()}</p>}
           </header>
@@ -376,8 +510,8 @@ export function MenuView({ venueId, venueName, branding, currencyCode, menus: sa
 
         {!menu ? (
           <div className="menu-empty">
-            <h2>{t("menu_title")}</h2>
-            <p>{t("menu_empty")}</p>
+            <h2>{title}</h2>
+            <p>{t(food ? "menu_empty" : "menu_empty_items")}</p>
           </div>
         ) : (
           <>
@@ -401,7 +535,7 @@ export function MenuView({ venueId, venueName, branding, currencyCode, menus: sa
 
             <label className="menu-search">
               <Search aria-hidden />
-              <input type="search" enterKeyHint="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t("menu_search")} aria-label={t("menu_search")} />
+              <input type="search" enterKeyHint="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder={food ? t("menu_search") : tf("menu_search_items", { items: profile.items })} aria-label={food ? t("menu_search") : tf("menu_search_items", { items: profile.items })} />
             </label>
 
             {activeFilters > 0 && (
@@ -438,7 +572,7 @@ export function MenuView({ venueId, venueName, branding, currencyCode, menus: sa
                         </span>
                         <span className="menu-special-text">
                           <span className="menu-special-name">{item.name}</span>
-                          <span className="menu-special-price">{formatPrice(item.priceInPence)}</span>
+                          <span className="menu-special-price">{priceText(item)}</span>
                         </span>
                       </button>
                     );
@@ -450,7 +584,7 @@ export function MenuView({ venueId, venueName, branding, currencyCode, menus: sa
             {hiddenByFilter > 0 && <p className="menu-note">{tf("menu_hidden_count", { count: hiddenByFilter })}</p>}
 
             {visibleSections.length === 0 ? (
-              <p className="menu-note">{t("menu_no_results")}</p>
+              <p className="menu-note">{t(food ? "menu_no_results" : "menu_no_results_items")}</p>
             ) : (
               visibleSections.map((section) => (
                 <section key={section.id} id={`section-${section.id}`} className="menu-section">
@@ -459,12 +593,12 @@ export function MenuView({ venueId, venueName, branding, currencyCode, menus: sa
                     <span>{section.items.length === 1 ? t("menu_items_one") : tf("menu_items", { count: section.items.length })}</span>
                   </div>
                   {section.description?.trim() && <p className="menu-section-desc">{section.description.trim()}</p>}
-                  <ul className={layout === "list" ? "dish-list" : "classic-list"}>{section.items.map(layout === "list" ? dishRow : classicItem)}</ul>
+                  <ul className={ITEM_LISTS[look]}>{section.items.map({ list: dishRow, classic: classicItem, grid: gridItem, simple: simpleItem, service: serviceItem }[look])}</ul>
                 </section>
               ))
             )}
 
-            <p className="menu-note small">{t(indian ? "menu_allergy_ask" : "menu_allergen_note")}</p>
+            {food && <p className="menu-note small">{t("menu_allergy_ask")}</p>}
             <p className="menu-note small menu-copyright">
               © {new Date().getFullYear()} {venueName}
             </p>
@@ -484,7 +618,7 @@ export function MenuView({ venueId, venueName, branding, currencyCode, menus: sa
         ]}
         sections={visibleSections.map((section) => ({ id: section.id, name: section.name, count: section.items.length }))}
         current={current}
-        labels={{ title: t("menu_browse"), categories: t("menu_categories"), clear: t("menu_filter_clear"), show: shownCount === 1 ? t("menu_show_one") : tf("menu_show_count", { count: shownCount }), close: t("close") }}
+        labels={{ title: t("menu_browse"), categories: t("menu_categories"), clear: t("menu_filter_clear"), show: food ? (shownCount === 1 ? t("menu_show_one") : tf("menu_show_count", { count: shownCount })) : tf("menu_show_count_items", { count: shownCount, items: shownCount === 1 ? profile.item : profile.items }), close: t("close") }}
         onJump={(sectionId) => {
           setBrowseOpen(false);
           // After the sheet lets go of the page's scroll lock.
@@ -503,10 +637,11 @@ export function MenuView({ venueId, venueName, branding, currencyCode, menus: sa
 
       <DishSheet
         item={openDish}
-        price={openDish ? formatPrice(openDish.priceInPence) : ""}
+        price={openDish ? priceText(openDish) : ""}
         tags={openDish ? tagList(openDish) : null}
-        details={openDish ? (indian ? (openDish.foodType ? [t(FOOD_TYPE_KEYS[openDish.foodType])] : []) : allergenLines(openDish)) : []}
-        labels={{ close: t("close"), whatsThis: t("menu_whats_this"), explainerNote: t("menu_explainer_allergens"), soldOut: t("menu_unavailable") }}
+        details={openDish && food ? (indian ? (openDish.foodType ? [t(FOOD_TYPE_KEYS[openDish.foodType])] : []) : allergenLines(openDish)) : []}
+        labels={{ close: t("close"), whatsThis: t("menu_whats_this"), explainerNote: t("menu_explainer_allergens"), soldOut: unavailable }}
+        action={openDish ? askButton(openDish, "ask-wa") : null}
         onClose={closeDish}
       />
     </div>

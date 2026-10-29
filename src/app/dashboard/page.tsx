@@ -23,11 +23,11 @@ export default async function DashboardHome({ searchParams }: PageProps<"/dashbo
       {verified === "1" && <div className="notice notice-ok">Your email is confirmed. Thanks!</div>}
       {verified === "0" && <div className="notice notice-error">That confirmation link has expired or was already used.</div>}
       <PageHeader
-        title={venues.length > 0 ? "Your venues" : "Your till access"}
-        description={venues.length > 0 ? "Each venue has its own guest page, QR codes and subscription." : "Open the till on the phone or tablet you're using behind the counter."}
+        title={venues.length > 0 ? "Your businesses" : "Your till access"}
+        description={venues.length > 0 ? "Each business has its own page, QR codes and subscription." : "Open the till on the phone or tablet you're using behind the counter."}
         actions={
           <Link className={`btn ${venues.length > 0 ? "btn-primary" : ""}`} href="/onboarding">
-            <Plus aria-hidden /> Add a venue
+            <Plus aria-hidden /> Add a business
           </Link>
         }
       />

@@ -46,7 +46,7 @@ export function formatInr(amount: number): string {
 }
 
 export const PLAN_FEATURES = [
-  "Hosted menu with photos, allergens and AI import",
+  "Hosted menu or price list with photos, offers and AI import",
   "Digital stamp cards, stamped at the till",
   "Wi-Fi card with optional email capture",
   "Private feedback box and Google review invitations",

@@ -4,7 +4,8 @@ import { Loader2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { dashboardApi, errorMessage } from "@/lib/api/dashboard-client";
-import { CURRENCIES, VENUE_TYPES } from "@/lib/venue/constants";
+import { BUSINESS_GROUPS, businessProfile, RETIRED_TYPES } from "@/lib/venue/business";
+import { CURRENCIES } from "@/lib/venue/constants";
 import type { VenueConfig } from "@/lib/venue/schema";
 import { useConfirm } from "./confirm";
 import { Card, Field, SaveBar, TextField } from "./ui";
@@ -18,16 +19,31 @@ export function VenueBasicsForm({ venueId, initial }: { venueId: string; initial
   const editor = useVenueDraft<Basics>(venueId, initial);
   const { draft, update } = editor;
   return (
-    <Card title="Venue details">
-      <TextField label="Venue name" value={draft.name} onChange={(value) => update("name", value ?? "")} maxLength={80} />
+    <Card title="Business details">
+      <TextField label="Business name" value={draft.name} onChange={(value) => update("name", value ?? "")} maxLength={80} />
       <div className="row" style={{ marginTop: 14 }}>
-        <Field label="Type of venue" htmlFor="venue-type" hint="Pubs and bars ask guests to confirm they're 18+ for marketing.">
-          <select id="venue-type" className="select" value={draft.venueType ?? "other"} onChange={(event) => update("venueType", event.target.value as Basics["venueType"])}>
-            {VENUE_TYPES.map((type) => (
-              <option key={type} value={type}>
-                {type.charAt(0).toUpperCase() + type.slice(1)}
-              </option>
+        <Field
+          label="Type of business"
+          htmlFor="venue-type"
+          hint={
+            // Switching type keeps everything: food details are only hidden, and the menu keeps its name.
+            draft.venueType !== initial.venueType
+              ? `Your ${businessProfile(initial.venueType).catalogue.toLowerCase()} keeps its name and items. Rename it on the ${businessProfile(draft.venueType).catalogue} page if you like.`
+              : "Sets the words your page and dashboard use, like Menu or Products."
+          }
+        >
+          <select id="venue-type" className="select" value={draft.venueType ?? "cafe"} onChange={(event) => update("venueType", event.target.value as Basics["venueType"])}>
+            {BUSINESS_GROUPS.map((group) => (
+              <optgroup key={group.group} label={group.label}>
+                {group.types.map((type) => (
+                  <option key={type} value={type}>
+                    {businessProfile(type).label} ({businessProfile(type).hint.toLowerCase()})
+                  </option>
+                ))}
+              </optgroup>
             ))}
+            {/* A type no longer offered ("Pub", "Other") stays selectable for venues that already have it. */}
+            {initial.venueType && RETIRED_TYPES.includes(initial.venueType) && <option value={initial.venueType}>{businessProfile(initial.venueType).label}</option>}
           </select>
         </Field>
         <Field label="Currency" htmlFor="currency">
@@ -91,7 +107,7 @@ export function ShortCodeForm({ venueId, shortCode, origin }: { venueId: string;
       <form onSubmit={submit}>
         <div className="input-prefix">
           <span>{origin.replace(/^https?:\/\//, "")}/s?i=</span>
-          <input className="input" aria-label="Venue code" value={value} onChange={(event) => setValue(event.target.value)} maxLength={40} />
+          <input className="input" aria-label="Page address" value={value} onChange={(event) => setValue(event.target.value)} maxLength={40} />
         </div>
         <p className="hint" style={{ marginTop: 6 }}>Lower-case letters, numbers and hyphens. Old printed codes keep working after a change.</p>
         <button className="btn" type="submit" style={{ marginTop: 12 }} disabled={!changed || action.pending}>
@@ -108,7 +124,7 @@ export function DeleteVenueForm({ venueId, name }: { venueId: string; name: stri
   const [confirm, setConfirm] = useState("");
   const action = useAction();
   return (
-    <Card title="Delete this venue" description="Removes the page, menus, guests, feedback and photos for good. Printed QR codes stop working." className="danger-zone">
+    <Card title="Delete this business" description="Removes the page, menus, customers, feedback and photos for good. Printed QR codes stop working." className="danger-zone">
       <form
         onSubmit={(event) => {
           event.preventDefault();
@@ -123,7 +139,7 @@ export function DeleteVenueForm({ venueId, name }: { venueId: string; name: stri
           <input id="confirm-delete" className="input" value={confirm} onChange={(event) => setConfirm(event.target.value)} autoComplete="off" />
         </Field>
         <button className="btn btn-danger" type="submit" style={{ marginTop: 12 }} disabled={confirm.trim() !== name.trim() || action.pending}>
-          Delete venue
+          Delete business
         </button>
         <Status error={action.error} done={null} />
       </form>
@@ -225,7 +241,7 @@ export function AccountForms({ name, email }: { name: string; email: string }) {
 
       <Card
         title="Delete account"
-        description="Deletes your account and every venue you own alone, with all of their guest data. This can't be undone."
+        description="Deletes your account and every business you own alone, with all of their customer data. This can't be undone."
         className="danger-zone"
         actions={
           !deleting && (
@@ -240,7 +256,7 @@ export function AccountForms({ name, email }: { name: string; email: string }) {
             onSubmit={async (event) => {
               event.preventDefault();
               const form = new FormData(event.currentTarget);
-              if (!(await ask({ title: "Delete your account?", body: "Your account and every venue you own alone are deleted for good, with all their guest data.", confirmLabel: "Delete account", danger: true }))) return;
+              if (!(await ask({ title: "Delete your account?", body: "Your account and every business you own alone are deleted for good, with all their customer data.", confirmLabel: "Delete account", danger: true }))) return;
               void removal.run(async () => {
                 await dashboardApi.deleteAccount({ password: String(form.get("password")) });
                 router.replace("/");

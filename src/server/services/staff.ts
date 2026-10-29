@@ -5,7 +5,7 @@ import { cache } from "react";
 import type { StaffCardView, StaffEnrollRequest, StaffEnrollResponse } from "@/lib/api/staff-contracts";
 import { isPlausibleEmail, isValidBirthday, maskEmail, normaliseEmail } from "@/lib/validation";
 import { programTiers, stampGoal } from "@/lib/venue/loyalty";
-import { birthdayAskOn, hasLoyaltyProgram } from "@/lib/venue/features";
+import { birthdayAskOn, hasTillCard, isReferralOnly } from "@/lib/venue/features";
 import type { PublicVenue } from "@/lib/venue/types";
 import { afterResponse } from "../after";
 import { getDb, transaction } from "../db";
@@ -14,7 +14,8 @@ import { newToken } from "../ids";
 import { findCardById, lockCard, setCardStamps, type LoyaltyCardRow } from "../repositories/loyalty-cards";
 import { lastStaffStampAt, lastUndoableEvent, markUndone, recordStampEvent, requestAlreadyDone } from "../repositories/stamps";
 import { findVenue, getVenueSettings } from "../repositories/venues";
-import { onStaffStamp } from "./retention";
+import { claimReferralReward, referralOfferState, referralRewardsInLast, reopenWelcome } from "../repositories/retention";
+import { MAX_REFERRAL_REWARDS_PER_MONTH, onStaffStamp, sendFriendRewardEmail } from "./retention";
 import { parseDbDate } from "@/lib/plans";
 import { birthdayTreat } from "./birthday";
 import { enroll } from "./loyalty";
@@ -121,7 +122,7 @@ export async function requireStaffDevice(): Promise<StaffDevice> {
 async function stampVenue(device: StaffDevice): Promise<PublicVenue> {
   // findVenue checks the subscription, so a lapsed venue can't keep stamping.
   const venue = await findVenue(device.venueId);
-  if (!venue || !hasLoyaltyProgram(venue)) throw new ServiceError(400, "This venue has no active stamp card");
+  if (!venue || !hasTillCard(venue)) throw new ServiceError(400, "This venue has no active stamp card or refer-a-friend offer");
   return venue;
 }
 
@@ -157,6 +158,8 @@ export async function viewCard(device: StaffDevice, cardId: string): Promise<Sta
     guestEmail: maskEmail(customer.email),
     stamps: card.stamps,
     goal: stampGoal(tiers),
+    offers: isReferralOnly(venue) ? await offersView(venue, card.id) : null,
+    stampRule: venue.loyaltyProgram?.stampRule?.trim() || null,
     tiers: tiers.map((tier, index) => ({ index, rewardName: tier.rewardName, stampsRequired: tier.stampsRequired, unlocked: card.stamps >= tier.stampsRequired })),
     undoable: undoable ? { kind: undoable.kind, delta: undoable.delta, rewardName: undoable.reward_name } : null,
     memberSince: new Date(parseDbDate(card.created_at) ?? Date.now()).toISOString(),
@@ -166,6 +169,54 @@ export async function viewCard(device: StaffDevice, cardId: string): Promise<Sta
     birthdayDate: customer.birthday_month && customer.birthday_day ? { month: customer.birthday_month, day: customer.birthday_day } : null,
     asksBirthday: birthdayAskOn(venue),
   };
+}
+
+/** Refer a friend without stamps: what staff can give on this card right now. */
+async function offersView(venue: PublicVenue, cardId: string): Promise<NonNullable<StaffCardView["offers"]>> {
+  const offers = venue.loyaltyProgram!.referralOffers!;
+  const state = await referralOfferState(await getDb(), cardId);
+  return { welcome: state.welcomeOpen ? offers.friend : null, ready: state.ready, member: offers.member };
+}
+
+/**
+ * An invited friend's first visit: staff give the welcome offer, once, and
+ * that visit earns the member who invited them their reward (within the
+ * monthly cap). The inviter is emailed after the till has its answer.
+ */
+export async function giveWelcomeOffer(device: StaffDevice, cardId: string, requestId?: string): Promise<StaffCardView> {
+  const venue = await stampVenue(device);
+  const offers = venue.loyaltyProgram?.referralOffers;
+  if (!isReferralOnly(venue) || !offers) throw new ServiceError(400, "This venue doesn't run refer-a-friend offers.");
+  const credited = await transaction(async (db) => {
+    const card = await requireCard(device, cardId, true);
+    if (await requestAlreadyDone(db, device.id, requestId)) return null;
+    const referrerId = await claimReferralReward(db, card.id);
+    if (!referrerId) throw new ServiceError(400, "There's no welcome offer on this card. It's for friends who joined through an invite, once.");
+    await recordStampEvent(db, { venueId: device.venueId, cardId: card.id, kind: "welcome", delta: 0, rewardName: offers.friend, deviceId: device.id, requestId });
+    const referrer = await findCardById(db, referrerId);
+    if (!referrer || referrer.venue_id !== device.venueId) return null;
+    if ((await referralRewardsInLast(db, referrer.id, 30)) >= MAX_REFERRAL_REWARDS_PER_MONTH) return null;
+    await recordStampEvent(db, { venueId: device.venueId, cardId: referrer.id, kind: "referral", delta: 0, rewardName: offers.member });
+    return referrer.id;
+  });
+  await touchDevice(device.id);
+  if (credited) await afterResponse("friend reward email", () => sendFriendRewardEmail(venue, credited, offers.member));
+  return await viewCard(device, cardId);
+}
+
+/** The member's reward for a friend who visited: one per friend, given at the till. */
+export async function giveFriendReward(device: StaffDevice, cardId: string, requestId?: string): Promise<StaffCardView> {
+  const venue = await stampVenue(device);
+  const offers = venue.loyaltyProgram?.referralOffers;
+  if (!isReferralOnly(venue) || !offers) throw new ServiceError(400, "This venue doesn't run refer-a-friend offers.");
+  await transaction(async (db) => {
+    const card = await requireCard(device, cardId, true);
+    if (await requestAlreadyDone(db, device.id, requestId)) return;
+    if ((await referralOfferState(db, card.id)).ready < 1) throw new ServiceError(400, "No friend reward on this card yet. It appears when a friend they invited makes a first visit.");
+    await recordStampEvent(db, { venueId: device.venueId, cardId: card.id, kind: "referral_redeem", delta: 0, rewardName: offers.member, deviceId: device.id, requestId });
+  });
+  await touchDevice(device.id);
+  return await viewCard(device, cardId);
 }
 
 /** Minutes since the last staff stamp, if inside the venue's cooldown. */
@@ -282,6 +333,8 @@ export async function undoLast(device: StaffDevice, cardId: string, requestId?: 
     const next = Math.min(Math.max(card.stamps - event.delta, 0), Math.max(goal, card.stamps));
     await setCardStamps(db, card.id, next);
     await markUndone(db, event.id);
+    // A welcome offer taken back: the friend can have it again, and the inviter loses the reward it earned.
+    if (event.kind === "welcome") await reopenWelcome(db, card.id, event.created_at);
     await recordStampEvent(db, { venueId: device.venueId, cardId: card.id, kind: "undo", delta: next - card.stamps, rewardName: event.reward_name, deviceId: device.id, requestId });
   });
   await touchDevice(device.id);

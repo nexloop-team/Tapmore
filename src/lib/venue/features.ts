@@ -11,11 +11,17 @@ export function sanitiseExternalUrl(value: unknown): string | null {
   return lower.startsWith("https://") || lower.startsWith("http://") ? value.trim() : null;
 }
 
-/** Merchant images: http(s) or a same-origin path. Protocol-relative and other schemes are dropped. */
+/**
+ * Merchant images: http(s) or a same-origin path. Protocol-relative and other
+ * schemes are dropped, except blob: URLs, which only exist in this browser:
+ * setup's live preview shows photos the owner just picked, before uploading
+ * them. A saved config can never hold one (the schema refuses them).
+ */
 export function safeImageUrl(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   if (trimmed.startsWith("/") && !trimmed.startsWith("//")) return trimmed;
+  if (trimmed.startsWith("blob:")) return trimmed;
   return sanitiseExternalUrl(trimmed);
 }
 
@@ -40,6 +46,21 @@ export function isStampCard(lp: PublicVenue["loyaltyProgram"] | undefined): bool
 /** A membership with no stamps: joining mints a pass that rewards are sent to. */
 export function isRewardsOnly(venue: PublicVenue): boolean {
   return venue.loyaltyProgram?.stampsEnabled === false;
+}
+
+/**
+ * "Refer a friend" without a stamp card: members get an invite link, an
+ * invited friend a welcome offer on their first visit, and the inviter a
+ * reward for each friend who comes in. Staff give both at the till.
+ */
+export function isReferralOnly(venue: Pick<PublicVenue, "loyaltyProgram">): boolean {
+  const lp = venue.loyaltyProgram;
+  return !!lp && lp.stampsEnabled === false && !!lp.referralOffers?.friend && !!lp.referralOffers?.member;
+}
+
+/** Members have a card staff scan at the till: a stamp card, or refer-a-friend offers. */
+export function hasTillCard(venue: PublicVenue): boolean {
+  return hasLoyaltyProgram(venue) || isReferralOnly(venue);
 }
 
 export function primaryMenu(venue: PublicVenue) {
@@ -100,10 +121,11 @@ export function consentAgeThreshold(venue: PublicVenue): 13 | 18 {
  * The cards this venue can show, in default order. Availability is decided
  * here; `applyFeatureOrder` may only reorder the result.
  */
-export function buildFeatures(venue: PublicVenue): FeatureKey[] {
+export function buildFeatures(venue: PublicVenue, options: { preview?: boolean } = {}): FeatureKey[] {
   const features: FeatureKey[] = [];
   if (hasLoyaltyProgram(venue) || isRewardsOnly(venue)) features.push("loyalty");
-  if (hasMenu(venue)) features.push("menu");
+  // Guests only see a menu with something in it; the owner's preview shows where it will go.
+  if (hasMenu(venue) || (options.preview && venue.menus.length > 0)) features.push("menu");
   if (hasWifi(venue)) features.push("wifi");
   if (venue.branding.sudokuEnabled !== false) features.push("sudoku");
   features.push("feedback");
@@ -154,6 +176,12 @@ export function resolvedTitle(branding: VenueBranding, venueName: string): strin
   }
   const name = venueName.trim();
   return name === "" ? null : name;
+}
+
+/** The banner photos to show, first first: the gallery (up to 5), or the single cover photo older pages have. */
+export function coverImages(branding: VenueBranding): string[] {
+  const list = [...(branding.coverImageUrls ?? []), branding.coverImageUrl].map(safeImageUrl).filter((url): url is string => !!url);
+  return [...new Set(list)].slice(0, 5);
 }
 
 export function resolvedTagline(branding: VenueBranding): string | null {

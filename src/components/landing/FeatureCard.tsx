@@ -2,7 +2,6 @@
 
 import { ChevronDown, ChevronRight, X } from "lucide-react";
 import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
-import { scrollMotion } from "@/lib/browser";
 import { useLanding } from "./LandingContext";
 
 /**
@@ -129,8 +128,6 @@ interface ExpandableCardProps extends RowProps {
 export function ExpandableCard({ feature, label, icon, tint, onToggle, onIntent, tile, children }: ExpandableCardProps) {
   const [isOpen, setOpen] = useState(false);
   const [hasOpened, setHasOpened] = useState(false);
-  const wrapperRef = useRef<HTMLDivElement>(null);
-  const sheetId = useId();
 
   const close = useCallback(() => setOpen(false), []);
 
@@ -139,9 +136,6 @@ export function ExpandableCard({ feature, label, icon, tint, onToggle, onIntent,
     setOpen(next);
     if (next) setHasOpened(true);
     onToggle?.(next, event);
-    if (next && !tile) {
-      setTimeout(() => wrapperRef.current?.scrollIntoView({ behavior: scrollMotion(), block: "start" }), 350);
-    }
   }
 
   if (tile) {
@@ -157,16 +151,15 @@ export function ExpandableCard({ feature, label, icon, tint, onToggle, onIntent,
     );
   }
 
+  // The row layouts open the same pop-up as the tiles, instead of growing the page underneath.
   return (
-    <div className="feature-wrapper" ref={wrapperRef} data-feature={feature}>
-      <button type="button" className="feature-card" aria-expanded={isOpen} aria-controls={sheetId} onClick={toggle} onPointerDown={onIntent} onFocus={onIntent}>
-        <RowContent label={label} icon={icon} tint={tint} chevron="down" />
+    <div className="feature-wrapper" data-feature={feature}>
+      <button type="button" className="feature-card" aria-haspopup="dialog" aria-expanded={isOpen} onClick={toggle} onPointerDown={onIntent} onFocus={onIntent}>
+        <RowContent label={label} icon={icon} tint={tint} chevron="right" />
       </button>
-      <section id={sheetId} className={`sheet${isOpen ? " open" : ""}`} aria-label={label} inert={!isOpen}>
-        <div className="sheet-clip">
-          <SheetContext.Provider value={{ isOpen, close }}>{hasOpened && children}</SheetContext.Provider>
-        </div>
-      </section>
+      <TileSheet open={isOpen} label={label} onClose={close}>
+        <SheetContext.Provider value={{ isOpen, close }}>{hasOpened && children}</SheetContext.Provider>
+      </TileSheet>
     </div>
   );
 }
@@ -191,12 +184,13 @@ export function ActionCard({ feature, onActivate, tile, ...row }: RowProps & { f
   );
 }
 
-/** A merchant's custom link: a real anchor, opened in a new tab, no chevron. */
-export function LinkCard({ href, onClick, tile, ...row }: RowProps & { href: string; onClick: () => void; tile?: TileSpec }) {
+/** A merchant's custom link: a real anchor, opened in a new tab (a phone number opens in place), no chevron. */
+export function LinkCard({ href, onClick, tile, newTab = true, ...row }: RowProps & { href: string; onClick: () => void; tile?: TileSpec; newTab?: boolean }) {
+  const target = newTab ? { target: "_blank", rel: "noopener noreferrer" } : {};
   if (tile) {
     return (
       <div className={tileClass(tile)} data-feature="link">
-        <a className="tile" href={href} target="_blank" rel="noopener noreferrer" onClick={onClick}>
+        <a className="tile" href={href} {...target} onClick={onClick}>
           {tile.content}
         </a>
       </div>
@@ -204,7 +198,7 @@ export function LinkCard({ href, onClick, tile, ...row }: RowProps & { href: str
   }
   return (
     <div className="feature-wrapper" data-feature="link">
-      <a className="feature-card" href={href} target="_blank" rel="noopener noreferrer" onClick={onClick}>
+      <a className="feature-card" href={href} {...target} onClick={onClick}>
         <RowContent {...row} chevron={false} />
       </a>
     </div>

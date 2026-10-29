@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { DEMO_VENUES } from "@/server/seed";
 import type { PublicVenue } from "./types";
-import { applyFeatureOrder, buildFeatures, consentAgeThreshold, customFeatureLabel, resolvedTitle, safeImageUrl, sanitiseExternalUrl, wifiView } from "./features";
+import { applyFeatureOrder, buildFeatures, consentAgeThreshold, coverImages, customFeatureLabel, resolvedTitle, safeImageUrl, sanitiseExternalUrl, wifiView } from "./features";
 
 const [juniper, , bloom] = DEMO_VENUES;
 
@@ -87,5 +87,22 @@ describe("header and helpers", () => {
     expect(wifiView(bloom)).toMatchObject({ isOpen: true, canCopyPassword: false });
     expect(consentAgeThreshold(venue({ venueType: "pub" }))).toBe(18);
     expect(consentAgeThreshold(juniper)).toBe(13);
+  });
+});
+
+describe("coverImages", () => {
+  it("shows the gallery first, falls back to the single cover, drops unsafe or repeated ones, at most 5", () => {
+    expect(coverImages({ coverImageUrl: "/demo/a.svg" })).toEqual(["/demo/a.svg"]);
+    expect(coverImages({ coverImageUrls: ["/demo/a.svg", "/demo/b.svg"], coverImageUrl: "/demo/a.svg" })).toEqual(["/demo/a.svg", "/demo/b.svg"]);
+    expect(coverImages({ coverImageUrls: ["javascript:alert(1)", "/demo/b.svg"] })).toEqual(["/demo/b.svg"]);
+    expect(coverImages({ coverImageUrls: ["1", "2", "3", "4", "5", "6"].map((n) => `/demo/${n}.svg`) })).toHaveLength(5);
+  });
+});
+
+describe("safeImageUrl", () => {
+  it("allows this browser's blob: previews but nothing else unusual", () => {
+    expect(safeImageUrl("blob:https://www.tapmore.in/2f1c")).toBe("blob:https://www.tapmore.in/2f1c");
+    expect(safeImageUrl("data:image/png;base64,AAAA")).toBeNull();
+    expect(safeImageUrl("javascript:alert(1)")).toBeNull();
   });
 });

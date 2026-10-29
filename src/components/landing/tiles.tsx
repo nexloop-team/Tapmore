@@ -1,11 +1,13 @@
 "use client";
 
-import { ArrowUpRight, Copy, Heart, Lock, MessageSquareText, Star, UtensilsCrossed, Wifi } from "lucide-react";
+import { ArrowUpRight, Copy, Heart, Lock, MessageSquareText, Star, Wifi } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { api } from "@/lib/api/client";
 import type { MemberCardView } from "@/lib/api/contracts";
 import { copyToClipboard, type CardCredentials } from "@/lib/browser";
-import { isRewardsOnly, wifiGateActive, wifiView } from "@/lib/venue/features";
+import { businessProfile } from "@/lib/venue/business";
+import { isReferralOnly, isRewardsOnly, wifiGateActive, wifiView } from "@/lib/venue/features";
+import { CATALOGUE_ICONS } from "../catalogue-icon";
 import { recentCardView, rememberCardView } from "../card/card-cache";
 import { useLanding } from "./LandingContext";
 
@@ -71,9 +73,9 @@ export function LoyaltyTile({ label, credentials }: { label: string; credentials
           <span className="tile-big">
             <Heart aria-hidden className="tile-big-icon" fill="currentColor" />
           </span>
-          <TileTitle sub={t("tile_club_sub")}>{label}</TileTitle>
+          <TileTitle sub={t(isReferralOnly(venue) ? "tile_referral_sub" : "tile_club_sub")}>{label}</TileTitle>
         </span>
-        <span className="tile-chip tile-chip-light">{t("tile_join")}</span>
+        <span className="tile-chip tile-chip-light">{credentials ? t("card_show_staff") : t("tile_join")}</span>
       </>
     );
   }
@@ -110,15 +112,19 @@ export function LoyaltyTile({ label, credentials }: { label: string; credentials
   );
 }
 
-/** Tall pale tile with a big faint knife and fork, and an arrow out. */
+/** Tall pale tile with a big faint knife and fork (or bag, scissors…), and an arrow out. */
 export function MenuTile({ label }: { label: string }) {
   const { venue, t, tf } = useLanding();
+  const profile = businessProfile(venue.venueType);
+  const Art = CATALOGUE_ICONS[profile.icon];
   // "Today: Pumpkin Spice Latte" when a dish is marked as today's special.
   const special = venue.menus.flatMap((menu) => menu.sections.flatMap((section) => section.items)).find((item) => item.featured && item.isAvailable);
   return (
     <>
-      <TileTitle sub={special ? tf("tile_menu_today", { name: special.name }) : t("tile_menu_sub")}>{label}</TileTitle>
-      <UtensilsCrossed className="tile-art" aria-hidden strokeWidth={1.25} />
+      <TileTitle sub={special ? tf("tile_menu_today", { name: special.name }) : t(profile.group === "food" ? "tile_menu_sub" : profile.group === "retail" ? "tile_menu_sub_retail" : "tile_menu_sub_service")}>
+        {label}
+      </TileTitle>
+      <Art className="tile-art" aria-hidden strokeWidth={1.25} />
       <span className="tile-go" aria-hidden>
         <ArrowUpRight />
       </span>
@@ -213,14 +219,16 @@ export function SudokuTile({ label }: { label: string }) {
   );
 }
 
-export function LinkTile({ label, icon }: { label: string; icon: ReactNode }) {
+export function LinkTile({ label, icon, arrow = true }: { label: string; icon: ReactNode; arrow?: boolean }) {
   return (
     <>
       <span className="tile-row">
         <span className="tile-glyph">{icon}</span>
-        <span className="tile-go tile-go-small" aria-hidden>
-          <ArrowUpRight />
-        </span>
+        {arrow && (
+          <span className="tile-go tile-go-small" aria-hidden>
+            <ArrowUpRight />
+          </span>
+        )}
       </span>
       <TileTitle>{label}</TileTitle>
     </>

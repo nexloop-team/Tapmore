@@ -148,6 +148,8 @@ export interface GoogleLocation {
   name: string;
   title?: string;
   storefrontAddress?: { addressLines?: string[]; locality?: string };
+  /** newReviewUri is the profile's "Ask for reviews" link: the one guests use to leave a review. */
+  metadata?: { newReviewUri?: string };
 }
 
 export async function listAccounts(refreshToken: string): Promise<GoogleAccount[]> {
@@ -156,7 +158,7 @@ export async function listAccounts(refreshToken: string): Promise<GoogleAccount[
 }
 
 export async function listLocations(refreshToken: string, account: string): Promise<GoogleLocation[]> {
-  const json = await call<{ locations?: GoogleLocation[] }>(refreshToken, "GET", `${INFO_API}/${account}/locations?readMask=name,title,storefrontAddress&pageSize=100`);
+  const json = await call<{ locations?: GoogleLocation[] }>(refreshToken, "GET", `${INFO_API}/${account}/locations?readMask=name,title,storefrontAddress,metadata&pageSize=100`);
   return json.locations ?? [];
 }
 

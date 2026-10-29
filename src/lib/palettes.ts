@@ -5,7 +5,9 @@
  * Each is one family of colours in clear steps, light to deep: a tinted
  * page, near-white cards on it, a mid tone for the accent tile and a deep
  * tone for the anchor tiles (text in that deep tone on the light tiles).
- * Coffee House is the owner-supplied reference; the others follow it.
+ * A palette that's been retired (Coffee House, Matcha, Rose Clay) is no
+ * longer found: a page that saved one keeps its page colour, and its tile
+ * shades are worked out from that colour instead.
  */
 
 export interface Palette {
@@ -22,10 +24,6 @@ export interface Palette {
 }
 
 export const PALETTES: Palette[] = [
-  // Cream #F5E6CA, White #FFFDF7, Beige #DCC7AA, Espresso Brown #4B3832.
-  { id: "coffee-house", name: "Coffee House", bg: "#F5E6CA", hero: "#4B3832", pop: "#DCC7AA", pale: "#FFFDF7" },
-  { id: "matcha", name: "Matcha", bg: "#E4E9D3", hero: "#33452B", pop: "#BFCB9B", pale: "#FBFCF5" },
-  { id: "rose-clay", name: "Rose Clay", bg: "#F3DFD3", hero: "#6B3A2A", pop: "#E2B8A0", pale: "#FFFBF8" },
   { id: "stone", name: "Stone", bg: "#E8E4DD", hero: "#2E2B28", pop: "#CBC3B6", pale: "#FFFDFA" },
   // A white page: soft grey tiles, ink for the stamp card and reviews, honey for Wi-Fi.
   { id: "white-honey", name: "White & Honey", bg: "#FFFFFF", hero: "#1C1C1E", pop: "#E6B85C", pale: "#F3F2EE" },

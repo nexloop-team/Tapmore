@@ -73,14 +73,14 @@ export function BirthdayRewardForm({
           <Field
             label="What they get"
             htmlFor="birthday-reward"
-            hint="Anything you like: a free dessert, 20% off the bill, a free drink."
+            hint="Anything you like: a free dessert, 20% off the bill, a free haircut."
             error={missingReward ? "Write what members get on their birthday." : null}
           >
             <input
               id="birthday-reward"
               className="input"
               maxLength={200}
-              placeholder="A free dessert"
+              placeholder="20% off your bill"
               value={draft.offer}
               onChange={(event) => setDraft({ ...draft, offer: event.target.value })}
             />

@@ -24,7 +24,7 @@ export const metadata: Metadata = {
   // Absolute links for share previews (Vercel supplies its own address when APP_URL isn't set).
   ...(process.env.APP_URL ? { metadataBase: new URL(process.env.APP_URL) } : {}),
   title: { default: BRAND.name, template: `%s · ${BRAND.name}` },
-  description: "QR-code pages for cafés, bars and restaurants: menus, Wi-Fi, loyalty cards and feedback.",
+  description: "QR-code pages for cafés, shops, salons and every local business: menus and price lists, loyalty cards, feedback and Google review replies.",
 };
 
 export const viewport: Viewport = {

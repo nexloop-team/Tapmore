@@ -68,7 +68,7 @@ function stripUndefined<T extends object>(value: T): Partial<T> {
 }
 
 export async function removeVenue(venue: VenueRecord, confirmName: string) {
-  if (confirmName.trim() !== venue.config.name.trim()) throw new ServiceError(400, "Type the venue name exactly to confirm");
+  if (confirmName.trim() !== venue.config.name.trim()) throw new ServiceError(400, "Type the business name exactly to confirm");
   await stopBilling(venue.id);
   // Take Tapmore's Google access back too; deleting the venue only removes our copy.
   await disconnectGoogle(venue.id);
