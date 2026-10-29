@@ -911,7 +911,7 @@
 /* ───────────────────────── Sudoku ───────────────────────── */
 
 .sudoku-inner {
-  padding: 12px 8px 14px;
+  padding: 4px 16px 14px;
 }
 .sudoku-headrow {
   display: flex;
@@ -1010,6 +1010,20 @@
   border-radius: 8px;
   overflow: hidden;
   touch-action: manipulation;
+}
+/*
+ * In a sheet the whole puzzle fits on screen: on a short phone the board
+ * shrinks (never below 270px, 30px cells) so the buttons and number pad stay
+ * in view. 330px is everything else in the sheet: its header, the levels
+ * row, the buttons, the pad and the spacing.
+ */
+.bottom-sheet .sudoku-board {
+  width: min(100%, max(270px, calc(88dvh - 330px)));
+  grid-template-rows: repeat(9, 1fr);
+  margin-inline: auto;
+}
+.bottom-sheet .sudoku-cell {
+  min-height: 0;
 }
 .sudoku-cell {
   position: relative;
