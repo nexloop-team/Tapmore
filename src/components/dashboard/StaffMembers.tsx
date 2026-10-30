@@ -1,6 +1,7 @@
 "use client";
 
 import { Loader2, Mail, Trash2, UserRound } from "lucide-react";
+import { lower, personWord } from "@/lib/venue/business";
 import { useState } from "react";
 import { dashboardApi, errorMessage } from "@/lib/api/dashboard-client";
 import { formatDate } from "@/lib/format";
@@ -20,7 +21,7 @@ interface StaffMemberView {
  * open the till on their own phone; they never see the dashboard, billing or
  * the guest list.
  */
-export function StaffMembers({ venueId, members }: { venueId: string; members: StaffMemberView[] }) {
+export function StaffMembers({ venueId, members, people }: { venueId: string; members: StaffMemberView[]; people: string }) {
   const ask = useConfirm();
   const toast = useToast();
   const [email, setEmail] = useState("");
@@ -63,7 +64,7 @@ export function StaffMembers({ venueId, members }: { venueId: string; members: S
   }
 
   return (
-    <Card id="staff" title="Staff logins" description="Give each team member their own login. It only opens the till: no dashboard, billing or guest list.">
+    <Card id="staff" title="Staff logins" description={`Give each team member their own login. It only opens the till: no dashboard, billing or ${lower(personWord({ people }))} list.`}>
       {listed.length > 0 && (
         <div className="list-editor" style={{ marginBottom: 14 }}>
           {listed.map((member) => (

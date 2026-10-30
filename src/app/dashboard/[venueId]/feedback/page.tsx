@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { MessageSquareText } from "lucide-react";
 import Link from "next/link";
+import { businessProfile, lower, personWord } from "@/lib/venue/business";
 import { loadDashboardVenue } from "@/server/dashboard";
 import { listFeedback, type FeedbackFilter } from "@/server/repositories/insights";
 import { firstParam } from "@/server/request";
@@ -26,6 +27,8 @@ function mood(score: number): { label: string; tone: string } {
 
 export default async function FeedbackPage({ params, searchParams }: PageProps<"/dashboard/[venueId]/feedback">) {
   const { venue, user } = await loadDashboardVenue((await params).venueId);
+  const profile = businessProfile(venue.config.venueType);
+  const person = lower(personWord(profile));
   const query = await searchParams;
   const filter = (FILTERS.find((f) => f.key === firstParam(query.filter))?.key ?? "all") as FeedbackFilter;
   const page = Math.max(1, Number(firstParam(query.page)) || 1);
@@ -42,7 +45,9 @@ export default async function FeedbackPage({ params, searchParams }: PageProps<"
       <div className="page-head">
         <div>
           <h1>Feedback</h1>
-          <p>Anonymous notes from your guests, for your eyes only. Every guest is also invited to review you on Google.</p>
+          <p>
+            Anonymous notes from your {profile.people}, for your eyes only. Every {person} is also invited to review you on Google.
+          </p>
         </div>
       </div>
 
@@ -57,7 +62,7 @@ export default async function FeedbackPage({ params, searchParams }: PageProps<"
       {rows.length === 0 ? (
         <div className="card empty">
           <MessageSquareText aria-hidden />
-          <p>{filter === "all" ? "No feedback yet. It shows up here the moment a guest sends some." : "Nothing in this filter."}</p>
+          <p>{filter === "all" ? `No feedback yet. It shows up here the moment a ${person} sends some.` : "Nothing in this filter."}</p>
         </div>
       ) : (
         <ul className="feedback-list">
@@ -77,7 +82,7 @@ export default async function FeedbackPage({ params, searchParams }: PageProps<"
                 {item.hasPhoto && (
                   <a href={photo} target="_blank" rel="noreferrer">
                     {/* eslint-disable-next-line @next/next/no-img-element -- private, auth-gated image */}
-                    <img src={photo} alt="Photo attached by the guest" loading="lazy" />
+                    <img src={photo} alt={`Photo attached by the ${person}`} loading="lazy" />
                   </a>
                 )}
               </li>

@@ -3,7 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { dashboardApi, errorMessage } from "@/lib/api/dashboard-client";
+import { leavingHref } from "@/lib/leave-guard";
 import type { VenueConfig } from "@/lib/venue/schema";
+import { useConfirm } from "./confirm";
 import { useToast } from "./toast";
 
 /**
@@ -20,7 +22,12 @@ function sidebarChanged(before: Partial<VenueConfig>, after: Partial<VenueConfig
  * The editor already holds what it saved, so nothing is fetched again
  * afterwards (the phone preview shows the draft live).
  */
-export function useVenueDraft<T extends Partial<VenueConfig>>(venueId: string, initial: T) {
+export function useVenueDraft<T extends Partial<VenueConfig>>(
+  venueId: string,
+  initial: T,
+  /** Unsaved changes the editor keeps outside the config (the birthday reward), so leaving still asks first. */
+  options: { pending?: boolean } = {},
+) {
   const router = useRouter();
   const toast = useToast();
   const [saved, setSaved] = useState(initial);
@@ -33,12 +40,39 @@ export function useVenueDraft<T extends Partial<VenueConfig>>(venueId: string, i
   const settledDraft = useDeferredValue(draft);
   const dirty = useMemo(() => savedJson !== JSON.stringify(settledDraft), [savedJson, settledDraft]);
 
+  const unsaved = dirty || !!options.pending;
   useEffect(() => {
-    if (!dirty) return;
+    if (!unsaved) return;
     const warn = (event: BeforeUnloadEvent) => event.preventDefault();
     window.addEventListener("beforeunload", warn);
     return () => window.removeEventListener("beforeunload", warn);
-  }, [dirty]);
+  }, [unsaved]);
+
+  // A link to another dashboard page (the sidebar, "Edit your menu") would drop the edits without a word:
+  // the browser's warning only covers closing the tab. Caught before the link's own handler, then asked.
+  const ask = useConfirm();
+  useEffect(() => {
+    if (!unsaved) return;
+    function onClick(event: MouseEvent) {
+      const anchor = (event.target as Element | null)?.closest?.("a[href]");
+      if (!(anchor instanceof HTMLAnchorElement)) return;
+      const href = leavingHref(event, { href: anchor.href, target: anchor.target, download: anchor.hasAttribute("download") }, window.location.href);
+      if (!href) return;
+      event.preventDefault();
+      event.stopPropagation();
+      void ask({
+        title: "Leave without saving?",
+        body: "Your changes on this page haven't been saved, and they'll be lost.",
+        confirmLabel: "Leave",
+        cancelLabel: "Stay",
+        danger: true,
+      }).then((leave) => {
+        if (leave) router.push(href);
+      });
+    }
+    document.addEventListener("click", onClick, true);
+    return () => document.removeEventListener("click", onClick, true);
+  }, [unsaved, ask, router]);
 
   const update = useCallback(<K extends keyof T>(key: K, value: T[K]) => {
     setError(null);

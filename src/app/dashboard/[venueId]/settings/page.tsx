@@ -13,6 +13,7 @@ export default async function SettingsPage({ params }: PageProps<"/dashboard/[ve
       <div className="page-head">
         <div>
           <h1>Settings</h1>
+          <p>Your business details and page address.</p>
         </div>
       </div>
       <VenueBasicsForm venueId={venue.id} initial={{ name, venueType, currencyCode }} />

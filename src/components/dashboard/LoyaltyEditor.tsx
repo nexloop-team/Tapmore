@@ -1,17 +1,20 @@
 "use client";
 
 import { Ban, Crown, Plus, Stamp, Trash2, UserPlus, type LucideIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { useRouter } from "next/navigation";
+import { useState, type ReactNode } from "react";
+import { dashboardApi, errorMessage } from "@/lib/api/dashboard-client";
 import { useLivePreview } from "@/lib/live-preview";
-import { businessProfile, capitalise } from "@/lib/venue/business";
+import { businessProfile, capitalise, lower, personWord } from "@/lib/venue/business";
 import { DEFAULT_REFERRAL_OFFERS } from "@/lib/venue/loyalty";
 import type { VenueConfig } from "@/lib/venue/schema";
 import type { VenueSettings } from "@/lib/venue/settings";
-import { BirthdayRewardForm } from "./BirthdayRewardForm";
+import { BirthdayRewardForm, birthdayRewardMissing } from "./BirthdayRewardForm";
 import { FeedbackStampSetting } from "./FeedbackStampSetting";
 import { EditorPanel, EditorTabs, PreviewPane, useEditorTab, type EditorTab } from "./EditorFrame";
 import { MobilePreview } from "./MobilePreview";
 import { Card, Field, SaveBar, SwitchRow, TextField } from "./ui";
+import { useToast } from "./toast";
 import { useVenueDraft } from "./useVenueDraft";
 
 type Draft = Pick<VenueConfig, "loyaltyProgram" | "crm">;
@@ -72,8 +75,16 @@ export function LoyaltyEditor({
 }) {
   // Compiled by the React Compiler (annotation mode, see next.config): re-renders only what an edit touches.
   "use memo";
-  const editor = useVenueDraft<Draft>(venueId, initial);
+  // The birthday reward lives in the venue's settings, not its page: saved alongside, from the same save bar.
+  const [savedBirthday, setSavedBirthday] = useState(automations.birthday);
+  const [birthday, setBirthday] = useState(automations.birthday);
+  const [birthdaySaving, setBirthdaySaving] = useState(false);
+  const [birthdayError, setBirthdayError] = useState<string | null>(null);
+  const birthdayDirty = birthday.enabled !== savedBirthday.enabled || birthday.offer !== savedBirthday.offer;
+  const editor = useVenueDraft<Draft>(venueId, initial, { pending: birthdayDirty });
   const { draft, update } = editor;
+  const router = useRouter();
+  const toast = useToast();
   const program = draft.loyaltyProgram ?? null;
   const mode = modeOf(program);
   const earlier = earlierTiers(program);
@@ -81,6 +92,31 @@ export function LoyaltyEditor({
   const main = { rewardName: program?.rewardName ?? "", stampsRequired: program?.stampsRequired || 9, stampRule: program?.stampRule ?? null };
   const crm = draft.crm;
   const setCrm = (patch: Partial<Draft["crm"]>) => update("crm", { ...crm, ...patch });
+
+  async function saveBirthday() {
+    if (birthdayRewardMissing(birthday, crm.enabled && crm.birthdayAsk)) {
+      setBirthdayError("Write what members get on their birthday, or turn the birthday reward off.");
+      return;
+    }
+    setBirthdaySaving(true);
+    setBirthdayError(null);
+    try {
+      const result = await dashboardApi.updateSettings(venueId, { automations: { birthday } });
+      setSavedBirthday(result.automations.birthday);
+      setBirthday(result.automations.birthday);
+      // The page's own save says so when both changed; alone, the birthday reward says it here.
+      if (!editor.dirty) toast({ text: "Birthday reward saved." });
+      router.refresh();
+    } catch (err) {
+      setBirthdayError(errorMessage(err));
+    } finally {
+      setBirthdaySaving(false);
+    }
+  }
+
+  async function saveAll() {
+    await Promise.all([editor.dirty ? editor.save() : null, birthdayDirty ? saveBirthday() : null]);
+  }
 
   function setMode(next: Mode) {
     if (next === "off") update("loyaltyProgram", null);
@@ -100,9 +136,11 @@ export function LoyaltyEditor({
   const offers = program?.referralOffers ?? DEFAULT_REFERRAL_OFFERS;
   const setOffers = (patch: Partial<typeof offers>) => update("loyaltyProgram", { rewardName: "", stampsRequired: 0, stampsEnabled: false, referralOffers: { ...offers, ...patch } });
 
+  // The business's own words: "Guests" for a café, "Customers" for a shop.
+  const People = capitalise(profile.people);
   const tabs: EditorTab[] = [
-    { id: "programme", label: "Rewards" },
-    { id: "capture", label: "Guest info" },
+    { id: "programme", label: "Programme" },
+    { id: "capture", label: `${People}' details` },
     // The till stamps, redeems and gives refer-a-friend offers; a members club has no card code to scan.
     ...(mode === "stamps" || mode === "referral" ? [{ id: "till", label: "Till", anchors: ["staff", "devices"] }] : []),
   ];
@@ -135,7 +173,7 @@ export function LoyaltyEditor({
             {mode === "stamps" && (
               <Card title="Rewards" description="Staff add a stamp when it's earned. When the card is full, the main reward is theirs and the card starts again.">
                 <div className="row">
-                  <TextField label="Main reward" value={main.rewardName} onChange={(value) => setMain({ rewardName: value ?? "" })} placeholder={profile.defaultReward || "e.g. 10% off your next visit"} maxLength={80} />
+                  <TextField label="Main reward" value={main.rewardName} onChange={(value) => setMain({ rewardName: value ?? "" })} placeholder={profile.defaultReward ? `e.g. ${profile.defaultReward}` : "e.g. 10% off your next visit"} maxLength={80} />
                   <Field label="Stamps needed" htmlFor="stamps-required">
                     <input
                       id="stamps-required"
@@ -152,7 +190,7 @@ export function LoyaltyEditor({
                   label="How a stamp is earned (optional)"
                   value={main.stampRule}
                   onChange={(value) => setMain({ stampRule: value })}
-                  placeholder={profile.stampRule || "e.g. 1 stamp per visit"}
+                  placeholder={profile.stampRule ? `e.g. ${profile.stampRule}` : "e.g. 1 stamp per visit"}
                   maxLength={80}
                   hint="Shown on the card, when people join and at the till. Staff still decide when to stamp."
                 />
@@ -246,14 +284,14 @@ export function LoyaltyEditor({
                   label="The friend gets, on their first visit"
                   value={offers.friend}
                   onChange={(value) => setOffers({ friend: value ?? "" })}
-                  placeholder={DEFAULT_REFERRAL_OFFERS.friend}
+                  placeholder={`e.g. ${DEFAULT_REFERRAL_OFFERS.friend}`}
                   maxLength={80}
                 />
                 <TextField
                   label="The member who invited them gets"
                   value={offers.member}
                   onChange={(value) => setOffers({ member: value ?? "" })}
-                  placeholder={DEFAULT_REFERRAL_OFFERS.member}
+                  placeholder={`e.g. ${DEFAULT_REFERRAL_OFFERS.member}`}
                   maxLength={80}
                   hint="Given at the till on their next visit, once per friend."
                 />
@@ -269,8 +307,8 @@ export function LoyaltyEditor({
             {mode === "membership" && (
               <Card title="Members club">
                 <p className="hint">
-                  Guests join a members list from your page. There&apos;s no stamp card: members get your birthday reward, and you can export the list from
-                  Guests to send your own offers to those who agreed.
+                  {People} join a members list from your page. There&apos;s no stamp card: members get your birthday reward, and you can export the list from{" "}
+                  {People} to send your own offers to those who agreed.
                 </p>
               </Card>
             )}
@@ -279,11 +317,15 @@ export function LoyaltyEditor({
 
             {mode !== "off" && (
               <BirthdayRewardForm
-                venueId={venueId}
-                initial={automations.birthday}
+                value={birthday}
+                onChange={(next) => {
+                  setBirthdayError(null);
+                  setBirthday(next);
+                }}
                 collectsBirthdays={crm.enabled && crm.birthdayAsk}
                 stampCard={mode === "stamps"}
                 onAskBirthdays={() => setTab("capture")}
+                detailsTab={`${People}' details`}
               />
             )}
 
@@ -292,11 +334,11 @@ export function LoyaltyEditor({
 
         {tab === "capture" && (
           <EditorPanel id="capture">
-            <Card title="Guest details" description="Build a list of guests you can reach again, with their permission.">
-              <SwitchRow title="Collect guest details" description="The main switch for everything below." checked={crm.enabled} onChange={(on) => setCrm({ enabled: on })} />
+            <Card title={`${People}' details`} description={`Build a list of ${profile.people} you can reach again, with their permission.`}>
+              <SwitchRow title={`Collect ${lower(personWord(profile))} details`} description="The main switch for everything below." checked={crm.enabled} onChange={(on) => setCrm({ enabled: on })} />
               <SwitchRow
                 title="Email for Wi-Fi"
-                description="Guests type their email to see the Wi-Fi password, and appear in your guest list. Off: everyone sees the password. No stamp is given for it."
+                description={`${People} type their email to see the Wi-Fi password, and appear in your ${lower(personWord(profile))} list. Off: everyone sees the password. No stamp is given for it.`}
                 checked={crm.wifiCapture}
                 disabled={!crm.enabled}
                 onChange={(on) => setCrm({ wifiCapture: on })}
@@ -304,7 +346,13 @@ export function LoyaltyEditor({
               {mode !== "off" && (
                 <SwitchRow
                   title="Offer membership after feedback"
-                  description={mode === "stamps" ? "After leaving feedback, guests are invited to join, with a free stamp." : "After leaving feedback, guests are invited to join the members club."}
+                  description={
+                    mode === "stamps"
+                      ? `After leaving feedback, ${profile.people} are invited to join, with a free stamp.`
+                      : mode === "referral"
+                        ? `After leaving feedback, ${profile.people} are invited to join and share their invite link.`
+                        : `After leaving feedback, ${profile.people} are invited to join the members club.`
+                  }
                   checked={crm.feedbackCapture}
                   disabled={!crm.enabled}
                   onChange={(on) => setCrm({ feedbackCapture: on })}
@@ -312,7 +360,7 @@ export function LoyaltyEditor({
               )}
               <SwitchRow
                 title="Ask for birthdays"
-                description="Optional when guests join your card. Day and month only, never the year. You can collect birthdays without giving a reward; a birthday reward (Rewards tab) needs this on."
+                description={`Optional when ${profile.people} join your card. Day and month only, never the year. You can collect birthdays without giving a reward; a birthday reward (Rewards tab) needs this on.`}
                 checked={crm.birthdayAsk}
                 disabled={!crm.enabled}
                 onChange={(on) => setCrm({ birthdayAsk: on })}
@@ -327,7 +375,17 @@ export function LoyaltyEditor({
 
       {mode !== "off" && <PreviewPane src={`${previewUrl}&embed=1`} title="Live page preview" fullHref={previewUrl} />}
 
-      <SaveBar dirty={editor.dirty} saving={editor.saving} error={editor.error} onSave={editor.save} onReset={editor.reset} />
+      <SaveBar
+        dirty={editor.dirty || birthdayDirty}
+        saving={editor.saving || birthdaySaving}
+        error={editor.error ?? birthdayError}
+        onSave={saveAll}
+        onReset={() => {
+          editor.reset();
+          setBirthday(savedBirthday);
+          setBirthdayError(null);
+        }}
+      />
     </div>
   );
 }

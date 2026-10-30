@@ -124,7 +124,7 @@ export function DeleteVenueForm({ venueId, name }: { venueId: string; name: stri
   const [confirm, setConfirm] = useState("");
   const action = useAction();
   return (
-    <Card title="Delete this business" description="Removes the page, menus, customers, feedback and photos for good. Printed QR codes stop working." className="danger-zone">
+    <Card title="Delete this business" description="Removes the page, its menu or products, customers, feedback and photos for good. Printed QR codes stop working." className="danger-zone">
       <form
         onSubmit={(event) => {
           event.preventDefault();

@@ -37,7 +37,7 @@ export default async function StaffHome({ searchParams }: PageProps<"/staff">) {
           <>
             <h1>This isn&apos;t a staff device yet</h1>
             <p>
-              Sign in with your staff login, or ask the venue owner to pair this device from their dashboard: <strong>Loyalty &amp; capture → Till</strong>.
+              Sign in with your staff login, or ask the venue owner to pair this device from their dashboard: <strong>Rewards → Till</strong>.
             </p>
             <a className="staff-btn staff-btn-secondary" href="/login?next=%2Fstaff">
               Sign in with a staff login

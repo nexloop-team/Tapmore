@@ -2,11 +2,15 @@ import type { Metadata } from "next";
 import { Download, Search, Users } from "lucide-react";
 import Link from "next/link";
 import { GuestDelete } from "@/components/dashboard/GuestDelete";
+import { businessProfile, capitalise, lower, personWord } from "@/lib/venue/business";
 import { loadDashboardVenue } from "@/server/dashboard";
 import { listGuests } from "@/server/repositories/insights";
 import { firstParam } from "@/server/request";
 
-export const metadata: Metadata = { title: "Guests" };
+export async function generateMetadata({ params }: PageProps<"/dashboard/[venueId]/guests">): Promise<Metadata> {
+  const { venue } = await loadDashboardVenue((await params).venueId);
+  return { title: capitalise(businessProfile(venue.config.venueType).people) };
+}
 
 const PAGE_SIZE = 50;
 
@@ -14,6 +18,9 @@ const SOURCES: Record<string, string> = { landing: "Loyalty card", feedback: "Af
 
 export default async function GuestsPage({ params, searchParams }: PageProps<"/dashboard/[venueId]/guests">) {
   const { venue } = await loadDashboardVenue((await params).venueId);
+  // The business's own words: "Guests" for a café, "Customers" for a shop.
+  const profile = businessProfile(venue.config.venueType);
+  const People = capitalise(profile.people);
   const query = await searchParams;
   const q = firstParam(query.q).slice(0, 100);
   const page = Math.max(1, Number(firstParam(query.page)) || 1);
@@ -26,9 +33,9 @@ export default async function GuestsPage({ params, searchParams }: PageProps<"/d
     <>
       <div className="page-head">
         <div>
-          <h1>Guests</h1>
+          <h1>{People}</h1>
           <p>Everyone who joined your loyalty card or left their email.</p>
-          <p className="hint">Guests agreed to their card, rewards and birthday emails, not to offers. Don&apos;t use this list or its export to send promotions.</p>
+          <p className="hint">{People} agreed to their card, rewards and birthday emails, not to offers. Don&apos;t use this list or its export to send promotions.</p>
         </div>
         <a className="btn" href={`/api/dashboard/venues/${venue.id}/guests/export`}>
           <Download aria-hidden /> Export CSV
@@ -37,7 +44,7 @@ export default async function GuestsPage({ params, searchParams }: PageProps<"/d
 
       <section className="card">
         <form className="inline" style={{ marginBottom: 14 }} action={base}>
-          <input className="input" style={{ flex: 1, minWidth: 180 }} type="search" name="q" defaultValue={q} placeholder="Search by name or email" aria-label="Search guests" />
+          <input className="input" style={{ flex: 1, minWidth: 180 }} type="search" name="q" defaultValue={q} placeholder="Search by name or email" aria-label={`Search ${profile.people}`} />
           <button className="btn" type="submit">
             <Search aria-hidden /> Search
           </button>
@@ -46,14 +53,14 @@ export default async function GuestsPage({ params, searchParams }: PageProps<"/d
         {rows.length === 0 ? (
           <div className="empty">
             <Users aria-hidden />
-            <p>{q ? "No guests match that search." : "No guests yet. They appear here when they join your loyalty card or leave their email for Wi-Fi."}</p>
+            <p>{q ? `No ${profile.people} match that search.` : `No ${profile.people} yet. They appear here when they join your loyalty card or leave their email for Wi-Fi.`}</p>
           </div>
         ) : (
           <div className="table-wrap">
             <table className="table">
               <thead>
                 <tr>
-                  <th>Guest</th>
+                  <th>{personWord(profile)}</th>
                   <th>Stamps</th>
                   <th>Birthday</th>
                   <th>Joined via</th>
@@ -88,7 +95,7 @@ export default async function GuestsPage({ params, searchParams }: PageProps<"/d
         {pages > 1 && (
           <div className="pager">
             <span>
-              {total} guests · page {page} of {pages}
+              {total} {profile.people} · page {page} of {pages}
             </span>
             <span className="inline">
               {page > 1 && (
@@ -106,8 +113,8 @@ export default async function GuestsPage({ params, searchParams }: PageProps<"/d
         )}
       </section>
       <p className="hint" style={{ marginTop: 12 }}>
-        Only email guests marked <strong>Subscribed</strong> with offers. Others joined for their loyalty card only. If a guest asks you to delete
-        their data, use the bin on their row; members can also delete their own card from its page.
+        Only email {profile.people} marked <strong>Subscribed</strong> with offers. Others joined for their loyalty card only. If a{" "}
+        {lower(personWord(profile))} asks you to delete their data, use the bin on their row; members can also delete their own card from its page.
       </p>
     </>
   );

@@ -405,13 +405,13 @@ export function OnboardingWizard({
               </div>
               <div className="row">
                 <Field label="Phone number (optional)" htmlFor="phone" hint="Adds a “Call” button to your page.">
-                  <input id="phone" className="input" type="tel" inputMode="tel" autoComplete="tel" placeholder="98765 43210" value={phone ?? ""} maxLength={20} onChange={(event) => setPhone(event.target.value)} />
+                  <input id="phone" className="input" type="tel" inputMode="tel" autoComplete="tel" placeholder="e.g. 98765 43210" value={phone ?? ""} maxLength={20} onChange={(event) => setPhone(event.target.value)} />
                 </Field>
                 {profile.booking && (
                   <Field label="WhatsApp for bookings (optional)" htmlFor="whatsapp" hint="Adds a “Book now” button that opens a chat.">
                     <span className="input-prefix">
                       {currencyCode === "INR" && <span aria-hidden>+91</span>}
-                      <input id="whatsapp" className="input" type="tel" inputMode="tel" placeholder="98765 43210" value={whatsapp ?? ""} maxLength={20} onChange={(event) => setWhatsapp(event.target.value)} />
+                      <input id="whatsapp" className="input" type="tel" inputMode="tel" placeholder="e.g. 98765 43210" value={whatsapp ?? ""} maxLength={20} onChange={(event) => setWhatsapp(event.target.value)} />
                     </span>
                   </Field>
                 )}
@@ -518,7 +518,7 @@ export function OnboardingWizard({
                         className="input"
                         aria-label={`Price of ${profile.item} ${index + 1}`}
                         inputMode="decimal"
-                        placeholder={profile.foodFields ? "120" : "499 or blank"}
+                        placeholder={profile.foodFields ? "e.g. 120" : "e.g. 499, or blank"}
                         value={row.price}
                         maxLength={14}
                         onChange={(event) => setRows(rows.map((r, i) => (i === index ? { ...r, price: event.target.value } : r)))}
@@ -723,7 +723,7 @@ export function OnboardingWizard({
                 label="Instagram (optional)"
                 value={instagram}
                 onChange={setInstagram}
-                placeholder="@yourbusiness"
+                placeholder="e.g. @yourbusiness"
                 maxLength={200}
                 hint="Shown as an icon at the bottom of your page."
               />
@@ -753,12 +753,12 @@ export function OnboardingWizard({
                   <p className="hint" style={{ marginBottom: 12 }}>
                     No stamps. Members share an invite link; a friend who joins gets a welcome offer on their first visit, and the member gets a reward for each friend who comes in.
                   </p>
-                  <TextField label="The friend gets, on their first visit" value={friendOffer} onChange={setFriendOffer} placeholder={DEFAULT_REFERRAL_OFFERS.friend} maxLength={80} />
+                  <TextField label="The friend gets, on their first visit" value={friendOffer} onChange={setFriendOffer} placeholder={`e.g. ${DEFAULT_REFERRAL_OFFERS.friend}`} maxLength={80} />
                   <TextField
                     label="The member who invited them gets"
                     value={memberOffer}
                     onChange={setMemberOffer}
-                    placeholder={DEFAULT_REFERRAL_OFFERS.member}
+                    placeholder={`e.g. ${DEFAULT_REFERRAL_OFFERS.member}`}
                     maxLength={80}
                     hint="Staff give both by scanning the member's card."
                   />
@@ -767,7 +767,7 @@ export function OnboardingWizard({
               {loyaltyOn && (
                 <>
                   <div className="row">
-                    <TextField label="Reward" value={rewardName} onChange={setRewardName} placeholder={profile.defaultReward || "e.g. 10% off your next visit"} maxLength={80} />
+                    <TextField label="Reward" value={rewardName} onChange={setRewardName} placeholder={profile.defaultReward ? `e.g. ${profile.defaultReward}` : "e.g. 10% off your next visit"} maxLength={80} />
                     <Field label="Stamps needed" htmlFor="stamps">
                       <input id="stamps" className="input" type="number" min={1} max={50} value={stamps} onChange={(event) => setStamps(Math.min(50, Math.max(1, Number(event.target.value) || 1)))} />
                     </Field>

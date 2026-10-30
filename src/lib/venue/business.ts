@@ -276,6 +276,11 @@ export function lower(word: string): string {
   return word.charAt(0).toLowerCase() + word.slice(1);
 }
 
+/** One of the people a business serves, capitalised for a title: "guests" → "Guest", "customers" → "Customer". */
+export function personWord(profile: Pick<BusinessProfile, "people">): string {
+  return capitalise(profile.people).replace(/s$/, "");
+}
+
 /** "dish" → "Dish". */
 export function capitalise(word: string): string {
   return word.charAt(0).toUpperCase() + word.slice(1);

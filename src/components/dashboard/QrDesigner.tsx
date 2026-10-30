@@ -46,11 +46,11 @@ export function QrDesigner({ venueId, guestUrl, printVenue }: { venueId: string;
   return (
     <>
       <div className="qr-grid no-print">
-        <Card title="Download a code" description="Print it on table cards, the counter, bills, bags or the window.">
+        <Card title="Download a code" description={printVenue.food ? "Print it on table cards, the counter, bills or the window." : "Print it on the counter, bills, bags or the window."}>
           <div className="qr-download">
             <div>
               <Field label="Where will this code go? (optional)" htmlFor="qr-label" hint={source ? `Scans will show as “${source}” in your stats.` : `Name it to see which spot gets the most scans, e.g. “${printVenue.spot} 2” or “Window”.`}>
-                <input id="qr-label" className="input" enterKeyHint="done" value={label} onChange={(event) => setLabel(event.target.value)} placeholder={`${printVenue.spot} 2`} maxLength={60} />
+                <input id="qr-label" className="input" enterKeyHint="done" value={label} onChange={(event) => setLabel(event.target.value)} placeholder={`e.g. ${printVenue.spot} 2`} maxLength={60} />
               </Field>
               <div className="field" style={{ marginTop: 14 }}>
                 <span className="field-label">Colour</span>

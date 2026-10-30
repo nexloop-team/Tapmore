@@ -423,7 +423,8 @@ body:has(.app) {
   gap: 12px;
   margin-bottom: 16px;
 }
-.card-head h2 {
+.card-head h2,
+.review-connect > h2 {
   font-family: var(--font-sans), var(--font-ui);
   font-size: 16px;
   font-weight: 600;
@@ -1546,6 +1547,27 @@ body:has(.app) {
   background: var(--a-surface);
   cursor: pointer;
 }
+/* The picked colour inside it is round too, like the swatches beside it (browsers draw it square). */
+.color-input::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+.color-input::-webkit-color-swatch {
+  border: 0;
+  border-radius: 50%;
+}
+.color-input::-moz-color-swatch {
+  border: 0;
+  border-radius: 50%;
+}
+/* QR page: five colours and your own on one row in the narrower column. */
+.qr-download .swatches {
+  gap: 8px;
+}
+.qr-download .swatch,
+.qr-download .color-input {
+  width: 36px;
+  height: 36px;
+}
 
 .wizard-actions .btn {
   min-height: 48px;
@@ -1692,6 +1714,12 @@ body:has(.app) {
 }
 .ob-own .color-input {
   border-radius: 10px;
+}
+.ob-own .color-input::-webkit-color-swatch {
+  border-radius: 7px;
+}
+.ob-own .color-input::-moz-color-swatch {
+  border-radius: 7px;
 }
 .ob-readable {
   display: inline-flex;
@@ -2210,7 +2238,12 @@ body:has(.app) {
   color: var(--a-text);
 }
 @media (max-width: 480px) {
+  /* Two to a row on a phone, so no tab hides past the edge. */
+  .editor-tabs {
+    flex-wrap: wrap;
+  }
   .editor-tabs button {
+    flex: 1 1 40%;
     padding: 8px 10px;
     font-size: 13px;
   }
@@ -2220,7 +2253,7 @@ body:has(.app) {
   color: var(--a-text);
   box-shadow: var(--a-shadow-md);
 }
-/* One editor, top to bottom, its cards numbered in the order to set them up. */
+/* One editor's cards, top to bottom. */
 .editor-flow {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -2229,11 +2262,6 @@ body:has(.app) {
 .editor-flow > .card {
   margin: 0;
   scroll-margin-top: 80px;
-}
-.step-title {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
 }
 .step-num {
   display: grid;
@@ -4385,10 +4413,11 @@ body:has(.app) {
   color: var(--text-secondary);
 }
 .a6-rule {
-  width: 14cqi;
-  height: 1px;
-  margin: 0.6cqi 0;
-  background: var(--text-tertiary);
+  width: 12cqi;
+  height: 0.7cqi;
+  margin: 0.8cqi 0;
+  border-radius: 1cqi;
+  background: var(--tile-pop, var(--text-tertiary));
 }
 .app .a6-card h2 {
   margin: 0;
@@ -4399,27 +4428,33 @@ body:has(.app) {
   color: inherit;
 }
 .a6-qr {
-  padding: 1.6cqi;
-  border-radius: 2.4cqi;
-  background: #ffffff;
+  flex: 1 1 0;
+  min-height: 0;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .a6-qr img {
   display: block;
-  width: 27cqi;
-  height: 27cqi;
-}
-/* A tagline takes a line, so the code gives a little room back. */
-.a6-card:has(.a6-tagline) .a6-qr img {
-  width: 24cqi;
-  height: 24cqi;
+  box-sizing: border-box;
+  height: 100%;
+  max-height: 36cqi;
+  max-width: 100%;
+  aspect-ratio: 1;
+  width: auto;
+  padding: 1.8cqi;
+  border-radius: 2.6cqi;
+  background: #ffffff;
+  /* A hairline, so the code's white box still shows on a white card. */
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
 }
 .a6-foot {
-  margin-top: auto;
-  align-self: stretch;
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
   align-items: center;
-  font-size: max(9px, 1.6cqi);
+  gap: 1cqi;
+  font-size: max(10px, 1.8cqi);
   color: var(--text-secondary);
 }
 .a6-foot .table-chip {
@@ -4435,6 +4470,8 @@ body:has(.app) {
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto minmax(0, 1fr);
   border-bottom: 1px dashed #b8b7b0;
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
 }
 .tent-card:last-child {
   border-bottom: 0;
@@ -4447,7 +4484,7 @@ body:has(.app) {
   border-top: 1px dashed #b8b7b0;
   text-align: right;
   font-size: max(8px, 1.3cqi);
-  color: #8a8f94;
+  color: var(--text-tertiary, #8a8f94);
 }
 .tent-panel {
   height: 100%;
@@ -4459,8 +4496,9 @@ body:has(.app) {
 .tent-qr {
   flex: none;
   padding: 1.6cqi;
-  border: 2px solid #16181a;
+  border: 0.6cqi solid var(--tile-pop, #16181a);
   border-radius: 2.4cqi;
+  background: #ffffff;
 }
 .tent-qr img {
   display: block;
@@ -4489,14 +4527,15 @@ body:has(.app) {
   object-fit: cover;
   display: grid;
   place-items: center;
-  background: #16181a;
-  color: #fff;
+  background: var(--text-primary, #16181a);
+  color: var(--page-bg, #fff);
   font-size: 1.8cqi;
   font-weight: 700;
 }
 .app .tent-text h2 {
   margin: 0;
-  font-size: max(16px, 4.6cqi);
+  color: inherit;
+  font-size: max(16px, 4.2cqi);
   line-height: 1.05;
   letter-spacing: -0.02em;
   text-wrap: balance;
@@ -4504,7 +4543,7 @@ body:has(.app) {
 .tent-text p {
   margin: 0;
   font-size: max(10px, 1.9cqi);
-  color: #4a4f54;
+  color: var(--text-secondary, #4a4f54);
 }
 
 /* Round stickers: the venue name round the top, what the code opens round the bottom. */

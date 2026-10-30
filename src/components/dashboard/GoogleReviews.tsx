@@ -105,7 +105,7 @@ export function ReviewCard({ venueId, review }: { venueId: string; review: Revie
             rows={4}
             maxLength={1500}
             value={text}
-            placeholder="Write your reply. Guests see it on Google as the owner's response."
+            placeholder="Write your reply. Everyone sees it on Google as the owner's response."
             onChange={(event) => setText(event.target.value)}
             aria-label="Your reply"
           />

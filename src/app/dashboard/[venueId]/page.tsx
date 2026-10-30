@@ -14,6 +14,8 @@ import { listFeedback, venueEngagement, venueStats, venueTotals } from "@/server
 import { firstParam, serverOrigin } from "@/server/request";
 import { guestPageUrl } from "@/server/services/qr";
 import { businessProfile, capitalise } from "@/lib/venue/business";
+import { isReferralOnly } from "@/lib/venue/features";
+import { googleConfigured } from "@/server/services/google";
 
 const PERIODS = [7, 30, 90] as const;
 const DAY = 86_400_000;
@@ -103,7 +105,8 @@ export default async function VenueOverview({ params, searchParams }: PageProps<
 
   const { firstWeek, sinceDay } = venueAge(venue.createdAt);
   const googleLinked = !!config.socialLinks.google && !!config.branding.showGoogleReviewButton;
-  const club = config.loyaltyProgram?.stampsEnabled === false;
+  const referralOnly = isReferralOnly(config);
+  const club = config.loyaltyProgram?.stampsEnabled === false && !referralOnly;
   // The business's own words: "Menu" or "Products", "guests" or "customers", "table" or "counter".
   const profile = businessProfile(config.venueType);
   const People = capitalise(profile.people);
@@ -124,13 +127,20 @@ export default async function VenueOverview({ params, searchParams }: PageProps<
     ...(profile.wifi || config.wifi?.ssid
       ? [{ done: !!config.wifi?.ssid, label: "Share your Wi-Fi", cta: "Add Wi-Fi", href: `${base}/design#wifi`, why: `${People} copy the password in one tap, so nobody has to ask at the counter.` }]
       : []),
-    { done: googleLinked, label: "Link your Google reviews", cta: "Add the link", href: `${base}/design#google`, why: `${People} who loved their visit can't find your review page yet. It takes a minute.`, help: `${base}/design#google` },
+    // Connecting Google fills the review link in by itself, and answers reviews too; without it, the link is pasted by hand.
+    googleConfigured()
+      ? { done: googleLinked, label: "Connect Google reviews", cta: "Connect Google", href: `${base}/reviews`, why: `${People} who loved their visit get a one-tap way to review you, and you can answer every review from here.` }
+      : { done: googleLinked, label: "Link your Google reviews", cta: "Add the link", href: `${base}/design#google`, why: `${People} who loved their visit can't find your review page yet. It takes a minute.`, help: `${base}/design#google` },
     {
       done: !!config.loyaltyProgram && (config.loyaltyProgram.stampsEnabled === false || !!config.loyaltyProgram.rewardName),
-      label: club ? "Set up your members club" : "Set up a stamp card",
+      label: referralOnly ? "Set up refer a friend" : club ? "Set up your members club" : "Set up a stamp card",
       cta: "Set up",
       href: `${base}/loyalty`,
-      why: `Regular ${profile.people} collect stamps on their phone and staff add them at the till.`,
+      why: referralOnly
+        ? `${People} share their link; friends get your welcome offer and staff give it at the till.`
+        : club
+          ? `${People} join free and get your members' rewards on their phone.`
+          : `Regular ${profile.people} collect stamps on their phone and staff add them at the till.`,
     },
     { done: stats.scans > 0 || both.scans > 0, label: "Print your QR codes and get a first scan", cta: "Print QR codes", href: `${base}/qr`, why: `One per ${spot}, so you can see which spots scan most.`, icon: <Printer aria-hidden /> },
   ];
@@ -145,7 +155,7 @@ export default async function VenueOverview({ params, searchParams }: PageProps<
 
   const dishNames = new Map(config.menus.flatMap((menu) => menu.sections.flatMap((section) => section.items.map((item) => [item.id, item.name] as const))));
   const topDishes = engagement.dishes.map((dish) => ({ ...dish, name: dishNames.get(dish.itemId) })).filter((dish): dish is typeof dish & { name: string } => !!dish.name);
-  const featureLabel = (feature: string) => (feature === "menu" ? profile.catalogue : (FEATURE_LABELS[feature] ?? (feature === "loyalty" ? (club ? "Members club" : "Stamp card") : feature)));
+  const featureLabel = (feature: string) => (feature === "menu" ? profile.catalogue : (FEATURE_LABELS[feature] ?? (feature === "loyalty" ? (referralOnly ? "Refer a friend" : club ? "Members club" : "Stamp card") : feature)));
   const maxFeature = Math.max(1, ...engagement.features.map((f) => f.visits));
   const maxHour = Math.max(...engagement.hours);
   const peakHour = maxHour > 0 ? engagement.hours.indexOf(maxHour) : null;
@@ -275,14 +285,14 @@ export default async function VenueOverview({ params, searchParams }: PageProps<
           href={`${base}/feedback`}
         />
         <Stat
-          label="Review taps"
+          label="Google review taps"
           value={googleLinked ? stats.reviewTaps : "—"}
           sub={googleLinked ? <CountDelta current={stats.reviewTaps} previous={previous.reviews} days={days} /> : <Link href={`${base}/design#google`}>{firstWeek ? "Link Google first" : "Link Google to count these"}</Link>}
         />
         <Stat
-          label={club ? "Members" : "Stamps given"}
-          value={club ? stats.totalGuests : stats.stampsGiven}
-          sub={firstWeek ? sinceDay : club ? undefined : <CountDelta current={stats.stampsGiven} previous={previous.stamps} days={days} />}
+          label={club || referralOnly ? "Members" : "Stamps given"}
+          value={club || referralOnly ? stats.totalGuests : stats.stampsGiven}
+          sub={firstWeek ? sinceDay : club || referralOnly ? undefined : <CountDelta current={stats.stampsGiven} previous={previous.stamps} days={days} />}
         />
         <Stat label={People} value={stats.totalGuests} sub={firstWeek ? sinceDay : <CountDelta current={stats.newGuests} previous={both.newGuests - stats.newGuests} days={days} />} href={`${base}/guests`} />
       </div>
@@ -437,7 +447,7 @@ export default async function VenueOverview({ params, searchParams }: PageProps<
         </section>
       </div>
 
-      <FeedbackSummaryCard venueId={venue.id} feedbackHref={`${base}/feedback`} />
+      <FeedbackSummaryCard venueId={venue.id} feedbackHref={`${base}/feedback`} people={profile.people} />
 
       <section className="card overview-feedback">
         <div className="card-head">

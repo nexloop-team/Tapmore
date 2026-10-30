@@ -146,7 +146,7 @@ export function MenuEditor({
   return (
     <div className="editor-grid">
       <div>
-        <MobilePreview src={previewUrl} label="Preview your menu" dirty={editor.dirty} />
+        <MobilePreview src={previewUrl} label={`Preview your ${catalogue.toLowerCase()}`} dirty={editor.dirty} />
         <div className="menu-switcher" role="group" aria-label="Menus">
           {list.map((m, index) => (
             <button key={m.id} type="button" className="chip" aria-pressed={m === menu} onClick={() => setSelected(index)}>
@@ -154,7 +154,7 @@ export function MenuEditor({
             </button>
           ))}
           <button type="button" className="chip chip-add" onClick={addMenu} disabled={list.length >= 10}>
-            <Plus aria-hidden /> New menu
+            <Plus aria-hidden /> {conventions.food ? "New menu" : "New list"}
           </button>
         </div>
 
@@ -224,7 +224,7 @@ export function MenuEditor({
                     label="Welcome note (optional)"
                     value={menu.welcomeText}
                     onChange={(value) => setMenu({ welcomeText: value })}
-                    placeholder={conventions.food ? "Food served 12 – 9pm" : "Prices include GST. Ask us about offers."}
+                    placeholder={conventions.food ? "e.g. Food served 12 – 9pm" : "e.g. Prices include GST. Ask us about offers."}
                     maxLength={200}
                   />
                   {conventions.food && (
@@ -447,7 +447,7 @@ function SectionCard({
       <input
         className="input pane-desc"
         aria-label="Section note"
-        placeholder={words.foodFields ? "Optional note, e.g. Served until 11:30" : "Optional note, e.g. New stock every Monday"}
+        placeholder={words.foodFields ? "Optional note, e.g. Served until 11:30" : words.group === "service" ? "Optional note, e.g. Prices for short hair" : "Optional note, e.g. New stock every Monday"}
         value={section.description ?? ""}
         maxLength={140}
         onChange={(event) => onChange({ ...section, description: event.target.value || null })}
@@ -476,7 +476,7 @@ function SectionCard({
                   <ChevronDown className="item-row-chevron" aria-hidden />
                 </button>
                 <span className="item-row-stock">
-                  <span aria-hidden>{it.isAvailable ? "In stock" : words.group === "food" ? "Sold out" : "Unavailable"}</span>
+                  <span aria-hidden>{it.isAvailable ? (words.group === "service" ? "Available" : "In stock") : words.group === "food" ? "Sold out" : "Unavailable"}</span>
                   <Switch label={`${it.name || `This ${words.item}`} in stock`} checked={it.isAvailable} onChange={(on) => setItem(it.id, { isAvailable: on })} />
                 </span>
                 {open && (

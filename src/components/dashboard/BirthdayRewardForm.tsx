@@ -1,67 +1,52 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
-import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { dashboardApi, errorMessage } from "@/lib/api/dashboard-client";
 import type { VenueSettings } from "@/lib/venue/settings";
 import { Card, Field, SwitchRow } from "./ui";
 
+type Birthday = VenueSettings["automations"]["birthday"];
+
+/** A birthday reward that's on needs a reward written: the Rewards page won't save without one. */
+export function birthdayRewardMissing(birthday: Birthday, collectsBirthdays: boolean): boolean {
+  return collectsBirthdays && birthday.enabled && !birthday.offer.trim();
+}
+
 /**
  * What members get on their birthday, whatever the owner likes. It needs the
- * birthdays asked under Guest info (asking for birthdays doesn't need a
+ * birthdays asked under the customers' details tab (asking for birthdays doesn't need a
  * reward). On the day, the member's card shows it and the till tells staff,
- * and members get a short birthday email inviting them in.
+ * and members get a short birthday email inviting them in. Saved with the
+ * rest of the Rewards page, from its save bar.
  */
 export function BirthdayRewardForm({
-  venueId,
-  initial,
+  value,
+  onChange,
   collectsBirthdays,
   stampCard,
   onAskBirthdays,
+  detailsTab,
 }: {
-  venueId: string;
-  initial: VenueSettings["automations"]["birthday"];
+  value: Birthday;
+  onChange: (next: Birthday) => void;
   collectsBirthdays: boolean;
   /** A stamp card has a till to give and record it; a members club shows it on the card only. */
   stampCard: boolean;
   onAskBirthdays: () => void;
+  /** The tab's name in the business's words: "Guests' details", "Customers' details". */
+  detailsTab: string;
 }) {
-  const router = useRouter();
-  const [saved, setSaved] = useState(initial);
-  const [draft, setDraft] = useState(initial);
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   // Without birthdays there's no reward, whatever was saved before.
-  const on = collectsBirthdays && draft.enabled;
-  const dirty = saved.enabled !== draft.enabled || saved.offer !== draft.offer;
-  const missingReward = on && !draft.offer.trim();
-  const reward = draft.offer.trim().replace(/[.!]+$/, "") || "your reward";
-
-  async function save() {
-    setBusy(true);
-    setMessage(null);
-    try {
-      const result = await dashboardApi.updateSettings(venueId, { automations: { birthday: draft } });
-      setSaved(result.automations.birthday);
-      setDraft(result.automations.birthday);
-      setMessage({ ok: true, text: "Saved." });
-      router.refresh();
-    } catch (err) {
-      setMessage({ ok: false, text: errorMessage(err) });
-    } finally {
-      setBusy(false);
-    }
-  }
+  const on = collectsBirthdays && value.enabled;
+  const missingReward = birthdayRewardMissing(value, collectsBirthdays);
+  const reward = value.offer.trim().replace(/[.!]+$/, "") || "your reward";
 
   return (
     <Card title="Birthday reward" description="A treat for each member on their birthday, given at your counter.">
       <SwitchRow
         title="Give a birthday reward"
-        description={collectsBirthdays ? undefined : "Turn on “Ask for birthdays” under Guest info first: without a birthday there's nothing to celebrate."}
+        description={collectsBirthdays ? undefined : `Turn on “Ask for birthdays” under ${detailsTab} first: without a birthday there's nothing to celebrate.`}
         checked={on}
         disabled={!collectsBirthdays}
-        onChange={(value) => setDraft({ ...draft, enabled: value })}
+        onChange={(enabled) => onChange({ ...value, enabled })}
       />
       {!collectsBirthdays && (
         <button type="button" className="btn btn-sm" style={{ justifySelf: "start" }} onClick={onAskBirthdays}>
@@ -80,9 +65,9 @@ export function BirthdayRewardForm({
               id="birthday-reward"
               className="input"
               maxLength={200}
-              placeholder="20% off your bill"
-              value={draft.offer}
-              onChange={(event) => setDraft({ ...draft, offer: event.target.value })}
+              placeholder="e.g. 20% off your bill"
+              value={value.offer}
+              onChange={(event) => onChange({ ...value, offer: event.target.value })}
             />
           </Field>
           <div className="reward-where">
@@ -109,12 +94,6 @@ export function BirthdayRewardForm({
           </div>
         </>
       )}
-      <div className="inline" style={{ marginTop: 14 }}>
-        <button type="button" className="btn btn-primary" onClick={save} disabled={!dirty || busy || missingReward}>
-          {busy && <Loader2 className="spin" aria-hidden />} Save birthday reward
-        </button>
-        {message && <span className={message.ok ? "hint" : "field-error"}>{message.text}</span>}
-      </div>
     </Card>
   );
 }

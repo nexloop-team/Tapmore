@@ -4,6 +4,7 @@ import { BrandMark } from "@/components/icons";
 import { CancelSubscriptionButton, SubscribeButton } from "@/components/dashboard/BillingActions";
 import { BRAND } from "@/config/brand";
 import { accessBadge, BILLING_PERIOD, CHARGES_GST, formatInr, gstNote, parseDbDate, PLAN_FEATURES, PRICE_INR, PRICE_TOTAL_INR, TRIAL_DAYS, trialDaysLeft } from "@/lib/plans";
+import { businessProfile, capitalise, lower } from "@/lib/venue/business";
 import { loadDashboardVenue } from "@/server/dashboard";
 import { billingMode } from "@/server/services/billing";
 import { guestPageUrl } from "@/server/services/qr";
@@ -35,8 +36,10 @@ function statusFor(input: {
   periodEnd: number | null;
   trialDays: number | null;
   updatedAt: number | null;
+  /** The business's own words: "guests" or "customers", "menu" or "products". */
+  words: { people: string; catalogue: string };
 }): { badge?: string; tone: "trial" | "ok" | "danger" | "info"; title: string; body: string; steps?: Step[]; progress?: { elapsed: number; total: number; start: string; end: string } } {
-  const { access, status, provider, cancelling, wasPaid, trialStart, trialEnd, periodEnd, trialDays, updatedAt } = input;
+  const { access, status, provider, cancelling, wasPaid, trialStart, trialEnd, periodEnd, trialDays, updatedAt, words } = input;
   if (access === "trial") {
     const lastDay = trialDays !== null && trialDays <= 1;
     const total = Math.max(1, Math.round(((trialEnd ?? 0) - (trialStart ?? 0)) / DAY));
@@ -55,7 +58,7 @@ function statusFor(input: {
       badge: "Unpaid · page offline",
       tone: "danger",
       title: "Your page is offline",
-      body: "Guests who scan your codes see a friendly “taking a short break” page. Your menu, guests and stamp cards are all safe.",
+      body: `${capitalise(words.people)} who scan your codes see a friendly “taking a short break” page. Your ${words.catalogue}, ${words.people} and stamp cards are all safe.`,
       steps: [
         { title: wasPaid ? "Subscription ended" : "Trial ended", sub: formatDay(wasPaid ? updatedAt : trialEnd), state: "done" },
         { title: "Subscribe", sub: "Takes about a minute with UPI", state: "now" },
@@ -89,7 +92,7 @@ function statusFor(input: {
       badge: "Won’t renew",
       tone: "info",
       title: `Your page stays live until ${formatDate(periodEnd)}`,
-      body: "Your subscription won’t renew. Changed your mind? Subscribe again before then and nothing changes for your guests.",
+      body: `Your subscription won’t renew. Changed your mind? Subscribe again before then and nothing changes for your ${words.people}.`,
     };
   }
   return {
@@ -113,6 +116,8 @@ export default async function BillingPage({ params, searchParams }: PageProps<"/
   const canSubscribe = access !== "paid" || cancelling;
   const devMode = mode === "dev" || subscription?.provider === "dev";
   const guestUrl = guestPageUrl(await serverOrigin(), venue.shortCode);
+  const profile = businessProfile(venue.config.venueType);
+  const words = { people: profile.people, catalogue: lower(profile.catalogue) };
   const state = statusFor({
     access,
     status: subscription?.status,
@@ -124,6 +129,7 @@ export default async function BillingPage({ params, searchParams }: PageProps<"/
     periodEnd,
     trialDays: trialDaysLeft(subscription),
     updatedAt: parseDbDate(subscription?.updatedAt),
+    words,
   });
   const subscribeLabel = cancelling ? "Subscribe again" : access === "unpaid" ? "Subscribe now" : "Subscribe";
   const planPoints = access === "unpaid" ? ["Everything included, no add-ons", "Page back online the moment you pay", "Cancel any time before renewal"] : PLAN_FEATURES;
@@ -133,14 +139,14 @@ export default async function BillingPage({ params, searchParams }: PageProps<"/
       <div className="page-head">
         <div>
           <h1>Subscription</h1>
-          <p>One plan with everything in it. Billed once a year for each venue.</p>
+          <p>One plan with everything in it. Billed once a year for each business.</p>
         </div>
       </div>
 
       {firstParam(query.subscribed) && <div className="notice notice-ok" style={{ marginBottom: 16 }}>You’re subscribed. Thank you! Your receipt is on its way to your inbox.</div>}
       {mode === "dev" && (
         <div className="notice notice-warn" style={{ marginBottom: 16 }}>
-          Payments are in dev mode (no Razorpay keys set): subscribing switches the venue on for a year without payment.
+          Payments are in dev mode (no Razorpay keys set): subscribing switches the business on for a year without payment.
         </div>
       )}
 
@@ -185,7 +191,7 @@ export default async function BillingPage({ params, searchParams }: PageProps<"/
               {access === "trial" && mode !== "disabled" && <SubscribeButton venueId={venue.id} label="Subscribe" />}
               {(access === "unpaid" || access === "paid") && (
                 <a className="btn" href={guestUrl} target="_blank" rel="noreferrer">
-                  <ExternalLink aria-hidden /> See what guests see
+                  <ExternalLink aria-hidden /> See what {words.people} see
                 </a>
               )}
               {canCancel && <CancelSubscriptionButton venueId={venue.id} endsOn={formatDate(periodEnd) || null} devMode={devMode} />}
@@ -196,8 +202,8 @@ export default async function BillingPage({ params, searchParams }: PageProps<"/
             <details open={access !== "paid"}>
               <summary>What happens if I don’t subscribe?</summary>
               <p>
-                Your guest page goes offline when the trial ends. You can still sign in and edit everything. Subscribe any time and the page comes back exactly as it was, with your menu, guests and stamp
-                cards.
+                Your page goes offline when the trial ends. You can still sign in and edit everything. Subscribe any time and the page comes back exactly as it was, with your {words.catalogue},{" "}
+                {words.people} and stamp cards.
               </p>
             </details>
             <details>
@@ -229,7 +235,7 @@ export default async function BillingPage({ params, searchParams }: PageProps<"/
           </div>
           <div className="plan-price">
             {formatInr(PRICE_INR)}
-            <span> / {BILLING_PERIOD} per venue</span>
+            <span> / {BILLING_PERIOD} per business</span>
           </div>
           <p className="plan-gst">
             {gstNote()}
@@ -242,7 +248,7 @@ export default async function BillingPage({ params, searchParams }: PageProps<"/
             ))}
           </ul>
           {managedBySupport ? (
-            <p className="plan-on">Included free for this venue</p>
+            <p className="plan-on">Included free for this business</p>
           ) : access === "paid" && !cancelling ? (
             <p className="plan-on">You’re on this plan</p>
           ) : canSubscribe && mode === "disabled" ? (

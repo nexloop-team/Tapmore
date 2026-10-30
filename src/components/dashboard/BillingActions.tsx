@@ -113,8 +113,8 @@ export function CancelSubscriptionButton({ venueId, endsOn, devMode }: { venueId
     const ok = await ask({
       title: "Cancel your subscription?",
       body: devMode
-        ? "Dev mode: it ends straight away and your guest page goes offline."
-        : `It won't renew. Your guest page stays live${endsOn ? ` until ${endsOn}` : " until the end of the year you paid for"}, then goes offline. Your settings are kept.`,
+        ? "Dev mode: it ends straight away and your page goes offline."
+        : `It won't renew. Your page stays live${endsOn ? ` until ${endsOn}` : " until the end of the year you paid for"}, then goes offline. Your settings are kept.`,
       confirmLabel: "Cancel subscription",
       cancelLabel: "Keep it",
       danger: true,

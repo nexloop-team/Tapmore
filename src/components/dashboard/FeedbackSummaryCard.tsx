@@ -2,6 +2,7 @@
 
 import { Lightbulb, Sparkles, ThumbsDown, ThumbsUp } from "lucide-react";
 import { useEffect, useState } from "react";
+import { capitalise } from "@/lib/venue/business";
 
 type Summary = { headline: string; praise: string[]; problems: string[]; suggestion: string };
 type State =
@@ -15,7 +16,7 @@ type State =
  * "What guests said this week" on the overview. Loaded after the page so the
  * overview never waits on the AI; hidden on servers without AI.
  */
-export function FeedbackSummaryCard({ venueId, feedbackHref }: { venueId: string; feedbackHref: string }) {
+export function FeedbackSummaryCard({ venueId, feedbackHref, people }: { venueId: string; feedbackHref: string; /** "guests", "customers" */ people: string }) {
   const [state, setState] = useState<State>({ state: "loading" });
   const [attempt, setAttempt] = useState(0);
 
@@ -40,7 +41,7 @@ export function FeedbackSummaryCard({ venueId, feedbackHref }: { venueId: string
       <div className="card-head">
         <div>
           <h2>
-            <Sparkles aria-hidden /> What guests said this week
+            <Sparkles aria-hidden /> What {people} said this week
           </h2>
           <p>{state.state === "ready" ? `A summary of ${state.notes} feedback notes from the last 7 days` : "A short summary of the last 7 days of feedback"}</p>
         </div>
@@ -57,7 +58,7 @@ export function FeedbackSummaryCard({ venueId, feedbackHref }: { venueId: string
       )}
       {state.state === "too_few" && (
         <p className="muted">
-          Once at least 3 guests leave feedback in a week, a short summary appears here. {state.notes > 0 && <a href={feedbackHref}>Read the {state.notes} so far</a>}
+          Once at least 3 {people} leave feedback in a week, a short summary appears here. {state.notes > 0 && <a href={feedbackHref}>Read the {state.notes} so far</a>}
         </p>
       )}
       {state.state === "ready" && (
@@ -67,7 +68,7 @@ export function FeedbackSummaryCard({ venueId, feedbackHref }: { venueId: string
             {state.summary.praise.length > 0 && (
               <div>
                 <h3>
-                  <ThumbsUp aria-hidden /> Guests liked
+                  <ThumbsUp aria-hidden /> {capitalise(people)} liked
                 </h3>
                 <ul>
                   {state.summary.praise.map((item) => (

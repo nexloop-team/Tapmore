@@ -9,7 +9,7 @@ import { BrandMark } from "@/components/icons";
 import { BRAND } from "@/config/brand";
 import { dashboardApi } from "@/lib/api/dashboard-client";
 import { initials } from "@/lib/format";
-import { businessProfile, capitalise } from "@/lib/venue/business";
+import { businessProfile, capitalise, personWord } from "@/lib/venue/business";
 import { ConfirmProvider } from "./confirm";
 import { forgetReadInbox, useReadInboxes } from "./FeedbackSeen";
 import { ToastProvider } from "./toast";
@@ -53,7 +53,7 @@ interface NavGroup {
 
 function venueNav(base: string, unreadFeedback = 0, reviews: { enabled: boolean; awaiting: number } = { enabled: false, awaiting: 0 }, venueType?: string | null): NavGroup[] {
   const profile = businessProfile(venueType);
-  const person = capitalise(profile.people).replace(/s$/, "");
+  const person = personWord(profile);
   return [
     { items: [{ href: base, label: "Overview", icon: LayoutDashboard, exact: true }] },
     {
@@ -61,7 +61,7 @@ function venueNav(base: string, unreadFeedback = 0, reviews: { enabled: boolean;
       items: [
         { href: `${base}/design`, label: `${person} page`, icon: Palette },
         { href: `${base}/menu`, label: profile.catalogue, icon: CATALOGUE_ICONS[profile.icon] },
-        { href: `${base}/loyalty`, label: "Loyalty & capture", icon: Gift },
+        { href: `${base}/loyalty`, label: "Rewards", icon: Gift },
         { href: `${base}/qr`, label: "QR codes", icon: QrCode },
       ],
     },

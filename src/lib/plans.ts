@@ -50,10 +50,10 @@ export const PLAN_FEATURES = [
   "Digital stamp cards, stamped at the till",
   "Wi-Fi card with optional email capture",
   "Private feedback box and Google review invitations",
-  "Guest list with CSV export",
+  "Customer list with CSV export",
   "Birthday rewards, with a birthday email",
   "Refer-a-friend rewards",
-  "Layouts, typography and no third-party branding",
+  "Layouts, fonts and no third-party branding",
   "Unlimited QR codes and scan analytics",
 ];
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { Loader2, Plus, Smartphone, Trash2 } from "lucide-react";
+import { capitalise } from "@/lib/venue/business";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { formatSince } from "@/lib/format";
@@ -28,12 +29,15 @@ export function StaffDevices({
   devices,
   cooldownMinutes,
   enabled,
+  people,
 }: {
   venueId: string;
   devices: { id: string; label: string; createdAt: string; lastUsedAt: string | null }[];
   cooldownMinutes: number;
-  /** Stamping only works on a live stamp card. */
+  /** The till only works with a live stamp card or refer-a-friend offers. */
   enabled: boolean;
+  /** "guests", "customers": the business's own word. */
+  people: string;
 }) {
   const router = useRouter();
   const ask = useConfirm();
@@ -79,8 +83,8 @@ export function StaffDevices({
 
 
   return (
-    <Card title="Staff devices" description="Phones or tablets at the till that can stamp cards. Guests tap “Show to staff” on their card; staff scan it with the device's camera.">
-      {!enabled && <p className="hint" style={{ marginBottom: 12 }}>Turn on a stamp card above (and save) to start stamping.</p>}
+    <Card title="Staff devices" description={`Phones or tablets at the till that can stamp cards. ${capitalise(people)} tap “Show to staff” on their card; staff scan it with the device's camera.`}>
+      {!enabled && <p className="hint" style={{ marginBottom: 12 }}>Turn on a stamp card or refer a friend on the Rewards tab (and save) to start using the till.</p>}
       <HelpTip question="How do I set up the till phone or tablet?">
         <ol>
           <li>Type a name for the device, like &ldquo;Front counter&rdquo;, and tap <strong>Add a staff device</strong>.</li>

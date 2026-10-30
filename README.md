@@ -158,7 +158,7 @@ Payment receipts and renewal notices come from Razorpay. Resend's free plan send
 | `/onboarding` | Five-step setup wizard that creates a venue (business, menu or products, look, online, rewards) |
 | `/dashboard` | Venue list (or straight into your only venue) |
 | `/dashboard/<venue>` | Overview: scans, guests, feedback, setup checklist |
-| `/dashboard/<venue>/design`, `/menu`, `/loyalty` | Editors for the guest page, menus and loyalty/capture |
+| `/dashboard/<venue>/design`, `/menu`, `/loyalty` | Editors for the customer page (in tabs), the menu, products or services, and rewards; leaving with unsaved changes asks first |
 | `/dashboard/<venue>/guests`, `/feedback` | Guest list (with CSV export) and feedback inbox |
 | `/dashboard/<venue>/reviews` | Google reviews: connect the Business Profile, reply settings, drafts to approve, replies posted |
 | `/dashboard/<venue>/qr`, `/qr/print` | QR downloads (PNG/SVG, per-table sources) and printable table cards |
