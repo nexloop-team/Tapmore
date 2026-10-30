@@ -4413,11 +4413,10 @@ body:has(.app) {
   color: var(--text-secondary);
 }
 .a6-rule {
-  width: 12cqi;
-  height: 0.7cqi;
-  margin: 0.8cqi 0;
-  border-radius: 1cqi;
-  background: var(--tile-pop, var(--text-tertiary));
+  width: 14cqi;
+  height: 1px;
+  margin: 0.6cqi 0;
+  background: var(--text-tertiary);
 }
 .app .a6-card h2 {
   margin: 0;
@@ -4428,33 +4427,27 @@ body:has(.app) {
   color: inherit;
 }
 .a6-qr {
-  flex: 1 1 0;
-  min-height: 0;
-  align-self: stretch;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  padding: 1.6cqi;
+  border-radius: 2.4cqi;
+  background: #ffffff;
 }
 .a6-qr img {
   display: block;
-  box-sizing: border-box;
-  height: 100%;
-  max-height: 36cqi;
-  max-width: 100%;
-  aspect-ratio: 1;
-  width: auto;
-  padding: 1.8cqi;
-  border-radius: 2.6cqi;
-  background: #ffffff;
-  /* A hairline, so the code's white box still shows on a white card. */
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.1);
+  width: 27cqi;
+  height: 27cqi;
+}
+/* A tagline takes a line, so the code gives a little room back. */
+.a6-card:has(.a6-tagline) .a6-qr img {
+  width: 24cqi;
+  height: 24cqi;
 }
 .a6-foot {
+  margin-top: auto;
+  align-self: stretch;
   display: flex;
-  flex-direction: column;
+  justify-content: space-between;
   align-items: center;
-  gap: 1cqi;
-  font-size: max(10px, 1.8cqi);
+  font-size: max(9px, 1.6cqi);
   color: var(--text-secondary);
 }
 .a6-foot .table-chip {
@@ -4470,8 +4463,6 @@ body:has(.app) {
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto minmax(0, 1fr);
   border-bottom: 1px dashed #b8b7b0;
-  -webkit-print-color-adjust: exact;
-  print-color-adjust: exact;
 }
 .tent-card:last-child {
   border-bottom: 0;
@@ -4484,7 +4475,7 @@ body:has(.app) {
   border-top: 1px dashed #b8b7b0;
   text-align: right;
   font-size: max(8px, 1.3cqi);
-  color: var(--text-tertiary, #8a8f94);
+  color: #8a8f94;
 }
 .tent-panel {
   height: 100%;
@@ -4496,9 +4487,8 @@ body:has(.app) {
 .tent-qr {
   flex: none;
   padding: 1.6cqi;
-  border: 0.6cqi solid var(--tile-pop, #16181a);
+  border: 2px solid #16181a;
   border-radius: 2.4cqi;
-  background: #ffffff;
 }
 .tent-qr img {
   display: block;
@@ -4527,15 +4517,14 @@ body:has(.app) {
   object-fit: cover;
   display: grid;
   place-items: center;
-  background: var(--text-primary, #16181a);
-  color: var(--page-bg, #fff);
+  background: #16181a;
+  color: #fff;
   font-size: 1.8cqi;
   font-weight: 700;
 }
 .app .tent-text h2 {
   margin: 0;
-  color: inherit;
-  font-size: max(16px, 4.2cqi);
+  font-size: max(16px, 4.6cqi);
   line-height: 1.05;
   letter-spacing: -0.02em;
   text-wrap: balance;
@@ -4543,7 +4532,7 @@ body:has(.app) {
 .tent-text p {
   margin: 0;
   font-size: max(10px, 1.9cqi);
-  color: var(--text-secondary, #4a4f54);
+  color: #4a4f54;
 }
 
 /* Round stickers: the venue name round the top, what the code opens round the bottom. */

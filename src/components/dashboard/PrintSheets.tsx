@@ -35,25 +35,6 @@ function headline(parts: string[]): string {
   return `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
 }
 
-/** "Scan for the menu & stamp card", "Scan for our services & stamp card": the line on every card and tent. */
-export function scanLine(offers: string[], food: boolean): string {
-  const what = headline(offers)
-    .replace(" and ", " & ")
-    .replace(/^[A-Z][a-z]/, (start) => start.toLowerCase())
-    .replace("your stamp card", "stamp card")
-    .replace("Wi-Fi", "Wi‑Fi");
-  return offers.length === 0 ? "Scan for everything in one place" : `Scan for ${food ? "the" : "our"} ${what}`;
-}
-
-/** The name round the top of a sticker: whole words only, so a long name never stops mid-word. */
-export function ringName(name: string, max = 26): string {
-  const upper = name.trim().toUpperCase();
-  if (upper.length <= max) return upper;
-  const cut = upper.slice(0, max + 1);
-  const end = cut.lastIndexOf(" ");
-  return (end > 0 ? cut.slice(0, end) : upper.slice(0, max)).replace(/[\s&·,\-]+$/, "");
-}
-
 /** "1-12" or "1, 2, Patio" → labelled cards ("Table 1", or "Counter 1" for a shop), capped so a typo can't render thousands. */
 export function parseTables(input: string, spot = "Table"): string[] {
   const labels: string[] = [];
@@ -103,15 +84,15 @@ export function PrintSheets({ venue, labels, color, format }: { venue: PrintVenu
   "use memo";
   const logo = safeImageUrl(venue.branding.logoUrl);
   const theme = computeTheme(venue.branding);
-  const title = scanLine(venue.offers, venue.food);
+  const title = headline(venue.offers);
   const ring = (venue.offers.length ? venue.offers : [venue.food ? "Menu" : "Offers"])
     .map((o) => o.replace("your ", "").replace("stamp card", "rewards").replace("member rewards", "rewards").toUpperCase())
     .join(" · ");
   // The venue's own colours for the A6 cards, stickers and signs.
   const venueStyle = { ...theme.vars, background: "var(--page-bg)", color: "var(--text-primary)" } as CSSProperties;
   // The venue name round the top of a sticker shrinks to fit the arc.
-  const ringTitle = ringName(venue.name);
-  const ringFont = Math.min(15, Math.floor(210 / (ringTitle.length * 0.85)));
+  const ringName = venue.name.toUpperCase().slice(0, 28);
+  const ringFont = Math.min(15, Math.floor(210 / (ringName.length * 0.85)));
   const items = format === "wifi" ? Array.from({ length: PRINT_FORMATS.wifi.perPage }, (_, i) => `Wi-Fi ${i + 1}`) : labels;
   const perPage = PRINT_FORMATS[format].perPage;
   const pages: string[][] = [];
@@ -142,7 +123,7 @@ export function PrintSheets({ venue, labels, color, format }: { venue: PrintVenu
           {venue.name}
         </span>
         <h2>{title}</h2>
-        <p>Point your phone camera at the code. No app needed.</p>
+        <p>Point your phone camera here. No app needed.</p>
         {chip(label)}
       </div>
     </div>
@@ -155,7 +136,7 @@ export function PrintSheets({ venue, labels, color, format }: { venue: PrintVenu
           {page.map((label, index) => {
             if (format === "tent")
               return (
-                <div key={`${label}-${index}`} className="tent-card" style={venueStyle}>
+                <div key={`${label}-${index}`} className="tent-card">
                   <div className="tent-flipped">{tentPanel(label)}</div>
                   <span className="tent-fold">Fold</span>
                   {tentPanel(label)}
@@ -172,7 +153,7 @@ export function PrintSheets({ venue, labels, color, format }: { venue: PrintVenu
                       </defs>
                       <text className="sticker-name" style={{ fontSize: ringFont, letterSpacing: ringFont * 0.22 }}>
                         <textPath href={`#top-${pageIndex}-${index}`} startOffset="50%" textAnchor="middle">
-                          {ringTitle}
+                          {ringName}
                         </textPath>
                       </text>
                       <text className="sticker-offers">
@@ -205,14 +186,16 @@ export function PrintSheets({ venue, labels, color, format }: { venue: PrintVenu
                 <span className="a6-name">{venue.name}</span>
                 {venue.tagline && <span className="a6-tagline">{venue.tagline}</span>}
                 <span className="a6-rule" aria-hidden />
-                <h2>{title}</h2>
+                <h2>
+                  Scan for {venue.food ? "the" : "our"} {title.replace(" and ", " & ").replace(/^[A-Z][a-z]/, (start) => start.toLowerCase()).replace("your stamp card", "stamp card").replace("Wi-Fi", "Wi‑Fi")}
+                </h2>
                 <span className="a6-qr">
                   {/* eslint-disable-next-line @next/next/no-img-element -- generated on demand, auth-gated */}
                   <img src={qr(label)} alt={label ? `QR code for ${label}` : "QR code"} />
                 </span>
                 <span className="a6-foot">
-                  {chip(label)}
-                  <span>Point your phone camera · No app needed</span>
+                  {chip(label) ?? <span />}
+                  <span>No app needed</span>
                 </span>
               </div>
             );
